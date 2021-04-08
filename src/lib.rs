@@ -1,6 +1,10 @@
 #[macro_use] extern crate log;
 
+#[macro_use]
+mod macros;
+mod util;
 mod synced_mem;
+mod blob;
 
 #[cfg(test)]
 mod tests {
