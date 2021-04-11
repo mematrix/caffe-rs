@@ -2,7 +2,7 @@ use std::boxed::Box;
 use std::rc::Rc;
 use std::cell::{RefCell, Ref, RefMut};
 
-use crate::synced_mem::SyncedMemory;
+use crate::synced_mem::{SyncedMemory, MemShared, MemPtr};
 use crate::util::math_functions::Blas;
 
 use std::borrow::Borrow;
@@ -17,13 +17,24 @@ unsafe impl BlobType for f32 {}
 
 unsafe impl BlobType for f64 {}
 
+#[derive(Copy, Clone)]
+pub struct BlobMemRef<'a, T> {
+    pub data: &'a [T],
+    pub diff: &'a [T],
+}
+
+pub struct BlobMemRefMut<'a, T> {
+    pub data: &'a mut [T],
+    pub diff: &'a mut [T],
+}
+
 /// A wrapper around `SyncedMemory` holders serving as the basic computational unit
 /// through which `Layer`, `Net` <strike>and `Solver`</strike> interact.
 #[derive(Default)]
-pub struct Blob<'a, T: BlobType + 'static> {
-    data: Option<Rc<RefCell<SyncedMemory<'a, T>>>>,
-    diff: Option<Rc<RefCell<SyncedMemory<'static, T>>>>,
-    // shape_data: Option<Box<SyncedMemory<'_, T>>>,
+pub struct Blob<T: BlobType> {
+    data: Option<Rc<RefCell<SyncedMemory<T>>>>,
+    diff: Option<Rc<RefCell<SyncedMemory<T>>>>,
+    shape_data: Option<Box<SyncedMemory<T>>>,
     shape: Vec<i32>,
     count: usize,
     capacity: usize,
@@ -31,7 +42,7 @@ pub struct Blob<'a, T: BlobType + 'static> {
 
 const MAX_BLOB_AXES: i32 = 32;
 
-impl<T> Blob<'_, T> where T: BlobType + 'static {
+impl<T> Blob<T> where T: BlobType {
     pub fn new() -> Self {
         Default::default()
     }
@@ -166,39 +177,49 @@ impl<T> Blob<'_, T> where T: BlobType + 'static {
         }
     }
 
-    pub fn reshape_like(&mut self, other: &Blob<'_, T>) {
+    pub fn reshape_like(&mut self, other: &Blob<T>) {
         self.reshape(other.shape());
+    }
+
+    pub fn cpu_data(&self) -> &[T] {
+        let (ptr, count) = self.data.as_ref().unwrap().borrow_mut().cpu_data().raw_parts();
+        unsafe { std::slice::from_raw_parts(ptr, count) }
+    }
+
+    pub fn cpu_data_shared(&self) -> MemShared<T> {
+        self.data.as_ref().unwrap().borrow_mut().cpu_data_shared()
     }
 
     // pub fn gpu_data(&mut self) -> &[T] {}
 
     pub fn cpu_diff(&self) -> &[T] {
         if let Some(ref ptr) = self.diff {
-            let mut data = (*ptr).borrow_mut();
-            let data = data.cpu_data();
-            unsafe { std::slice::from_raw_parts(data.as_ptr(), data.len()) }
+            let (ptr, count) = (*ptr).borrow_mut().cpu_data().raw_parts();
+            unsafe { std::slice::from_raw_parts(ptr, count) }
         } else {
             panic!("diff memory not init");
         }
     }
 
-    pub fn cpu_data(&self) -> &[T] {
-        if let Some(ref ptr) = self.data {
-            let mut data = (*ptr).borrow_mut();
-            let data = data.cpu_data();
-            unsafe { std::slice::from_raw_parts(data.as_ptr(), data.len()) }
-        } else {
-            panic!("data memory not init");
-        }
+    pub fn cpu_diff_shared(&self) -> MemShared<T> {
+        self.diff.as_ref().unwrap().borrow_mut().cpu_data_shared()
     }
 
     // pub fn gpu_diff(&mut self) -> &[T] {}
 
+    pub fn cpu_mem_ref(&self) -> BlobMemRef<T> {
+        let (data_ptr, data_count) = self.data.as_ref().unwrap().borrow_mut().cpu_data().raw_parts();
+        let (diff_ptr, diff_count) = self.diff.as_ref().unwrap().borrow_mut().cpu_data().raw_parts();
+        BlobMemRef {
+            data: unsafe { std::slice::from_raw_parts(data_ptr, data_count) },
+            diff: unsafe { std::slice::from_raw_parts(diff_ptr, diff_count) },
+        }
+    }
+
     pub fn mutable_cpu_data(&mut self) -> &mut [T] {
         if let Some(ref mut ptr) = self.data {
-            let mut data = (*ptr).borrow_mut();
-            let data = data.mutable_cpu_data();
-            unsafe { std::slice::from_raw_parts_mut(data.as_mut_ptr(), data.len()) }
+            let (ptr, count) = (*ptr).borrow_mut().mutable_cpu_data().raw_parts();
+            unsafe { std::slice::from_raw_parts_mut(ptr, count) }
         } else {
             panic!("data memory not init");
         }
@@ -206,11 +227,42 @@ impl<T> Blob<'_, T> where T: BlobType + 'static {
 
     pub fn mutable_cpu_diff(&mut self) -> &mut [T] {
         if let Some(ref mut ptr) = self.diff {
-            let mut data = (*ptr).borrow_mut();
-            let data = data.mutable_cpu_data();
-            unsafe { std::slice::from_raw_parts_mut(data.as_mut_ptr(), data.len()) }
+            let (ptr, count) = (*ptr).borrow_mut().mutable_cpu_data().raw_parts();
+            unsafe { std::slice::from_raw_parts_mut(ptr, count) }
         } else {
             panic!("diff memory not init");
+        }
+    }
+
+    pub fn mutable_cpu_mem_ref(&mut self) -> BlobMemRefMut<T> {
+        let (data_ptr, data_count) = self.data.as_ref().unwrap().borrow_mut().mutable_cpu_data().raw_parts();
+        let (diff_ptr, diff_count) = self.diff.as_ref().unwrap().borrow_mut().mutable_cpu_data().raw_parts();
+        BlobMemRefMut {
+            data: unsafe { std::slice::from_raw_parts_mut(data_ptr, data_count) },
+            diff: unsafe { std::slice::from_raw_parts_mut(diff_ptr, diff_count) },
+        }
+    }
+
+    pub fn set_cpu_data(&mut self, data: &MemShared<T>) {
+        if let Some(ref mut ptr) = self.data {
+            let data_count = (*ptr).as_ref().borrow().count();
+            if data_count != self.count {
+                self.data = Some(Rc::new(RefCell::new(SyncedMemory::new(self.count))));
+                self.diff = Some(Rc::new(RefCell::new(SyncedMemory::new(self.count))));
+            }
+            self.data.as_ref().unwrap().borrow_mut().set_cpu_data(data);
+        } else {
+            panic!("data memory not init");
+        }
+    }
+
+    pub fn share_data(&mut self, other: &Blob<T>) {
+        check_eq!(self.count, other.count());
+
+        if let Some(ref ptr) = other.data {
+            self.data = Some(Rc::clone(ptr));
+        } else {
+            panic!("data memory of other not init");
         }
     }
 
@@ -249,37 +301,36 @@ impl<T> Blob<'_, T> where T: BlobType + 'static {
     }
 }
 
-impl<'a, T> Blob<'a, T> where T: BlobType + 'static {
-    pub fn set_cpu_data(&mut self, data: &'a mut [T]) {
-        if let Some(ref mut ptr) = self.data {
-            let data_count = (*ptr).as_ref().borrow().count();
-            if data_count != self.count {
-                self.data = Some(Rc::new(RefCell::new(SyncedMemory::new(self.count))));
-                self.diff = Some(Rc::new(RefCell::new(SyncedMemory::new(self.count))));
-            }
-            self.data.as_ref().unwrap().borrow_mut().set_cpu_data(data);
-        } else {
-            panic!("data memory not init");
-        }
+impl Blob<f32> {
+    pub fn update(&mut self) {
+        let count = self.count as i32;
+        let mem_ref = self.mutable_cpu_mem_ref();
+        Blas::<f32>::caffe_axpy(count, -1.0f32, mem_ref.diff, mem_ref.data);
     }
 
-    pub fn share_data(&mut self, other: &Blob<'a, T>) {
-        check_eq!(self.count, other.count());
-
-        if let Some(ref ptr) = other.data {
-            self.data = Some(Rc::clone(ptr));
+    pub fn asum_data(&self) -> f32 {
+        if let Some(ref ptr) = self.data {
+            let data = (*ptr).as_ref().borrow();
+            data.try_map_cpu_data(|slice| Blas::<f32>::caffe_cpu_asum(self.count as i32, slice))
+                .unwrap_or(0.0f32)
         } else {
-            panic!("data memory of other not init");
+            0.0f32
         }
     }
 }
 
-impl Blob<'_, f32> {
+impl Blob<f64> {
     pub fn update(&mut self) {
-        let mut diff = self.diff.as_ref().unwrap().borrow_mut();
-        let diff = diff.cpu_data();
-        let mut data = self.data.as_ref().unwrap().borrow_mut();
-        let data = data.mutable_cpu_data();
-        Blas::<f32>::caffe_axpy(self.count as i32, -1.0f32, diff, data);
+        let count = self.count as i32;
+        let mem_ref = self.mutable_cpu_mem_ref();
+        Blas::<f64>::caffe_axpy(count, -1.0f64, mem_ref.diff, mem_ref.data);
+    }
+
+    pub fn asum_data(&self) -> f64 {
+        self.data.as_ref().map_or(0.0f64, |ptr| {
+            let data = (*ptr).as_ref().borrow();
+            data.try_map_cpu_data(|slice| Blas::<f64>::caffe_cpu_asum(self.count as i32, slice))
+                .unwrap_or(0.0f64)
+        })
     }
 }
