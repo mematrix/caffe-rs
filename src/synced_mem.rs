@@ -117,6 +117,13 @@ impl<T: Sized> SyncedMemory<T> {
         RefCell::borrow_mut(self.cpu_mem.as_ref().unwrap())
     }
 
+    pub fn try_map_cpu_mut_data<F, U>(&mut self, f: F) -> Option<U> where F: FnOnce(&mut [T]) -> U {
+        self.cpu_mem.as_ref().map(|ptr| {
+            let mut data = RefCell::borrow_mut((*ptr).as_ref());
+            f(data.as_mut_slice())
+        })
+    }
+
     pub fn set_cpu_data(&mut self, data: &MemShared<T>) {
         let mem_ptr = data.mem.as_ptr();
         let &MemPtr { ptr, count } = unsafe { &*mem_ptr };

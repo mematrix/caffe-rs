@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::cell::{RefCell, Ref, RefMut};
 
 use crate::synced_mem::{SyncedMemory, MemShared, MemPtr};
-use crate::util::math_functions::Blas;
+use crate::util::math_functions::{Blas, CaffeUtil};
 
 use std::borrow::Borrow;
 use std::option::Option::Some;
@@ -34,7 +34,7 @@ pub struct BlobMemRefMut<'a, T> {
 pub struct Blob<T: BlobType> {
     data: Option<Rc<RefCell<SyncedMemory<T>>>>,
     diff: Option<Rc<RefCell<SyncedMemory<T>>>>,
-    shape_data: Option<Box<SyncedMemory<T>>>,
+    // shape_data: Option<Box<SyncedMemory<T>>>,
     shape: Vec<i32>,
     count: usize,
     capacity: usize,
@@ -297,7 +297,19 @@ impl<T> Blob<T> where T: BlobType {
     }
 
     pub fn copy_from(&mut self, source: &Blob<T>, copy_diff: bool, reshape: bool) {
-        //
+        if (self.count != source.count) || (self.shape != source.shape) {
+            if reshape {
+                self.reshape_like(source);
+            } else {
+                panic!("Trying to copy blobs of different sizes.");
+            }
+        }
+
+        if copy_diff {
+            CaffeUtil::caffe_copy(self.count, source.cpu_diff(), self.mutable_cpu_diff());
+        } else {
+            CaffeUtil::caffe_copy(self.count, source.cpu_data(), self.mutable_cpu_data());
+        }
     }
 }
 
@@ -317,6 +329,45 @@ impl Blob<f32> {
             0.0f32
         }
     }
+
+    pub fn asum_diff(&self) -> f32 {
+        self.diff.as_ref().map_or(0.0f32, |ptr| {
+            let data = (*ptr).as_ref().borrow();
+            data.try_map_cpu_data(|slice| Blas::<f32>::caffe_cpu_asum(self.count as i32, slice))
+                .unwrap_or(0.0f32)
+        })
+    }
+
+    fn sumsq_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f32>>>>, count: i32) -> f32 {
+        mem.as_ref().map_or(0.0f32, |ptr| {
+            let data = (*ptr).as_ref().borrow();
+            data.try_map_cpu_data(|slice| Blas::<f32>::caffe_cpu_dot(count, slice, slice))
+                .unwrap_or(0.0f32)
+        })
+    }
+
+    pub fn sumsq_data(&self) -> f32 {
+        Self::sumsq_cpu(&self.data, self.count as i32)
+    }
+
+    pub fn sumsq_diff(&self) -> f32 {
+        Self::sumsq_cpu(&self.diff, self.count as i32)
+    }
+
+    fn scale_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f32>>>>, count: i32, scale_factor: f32) {
+        if let Some(ref ptr) = mem {
+            let mut data = (*ptr).borrow_mut();
+            data.try_map_cpu_mut_data(|slice| Blas::<f32>::caffe_scal(count, scale_factor, slice));
+        }
+    }
+
+    pub fn scale_data(&mut self, scale_factor: f32) {
+        Self::scale_cpu(&self.data, self.count as i32, scale_factor)
+    }
+
+    pub fn scale_diff(&mut self, scale_factor: f32) {
+        Self::scale_cpu(&self.diff, self.count as i32, scale_factor)
+    }
 }
 
 impl Blob<f64> {
@@ -326,11 +377,50 @@ impl Blob<f64> {
         Blas::<f64>::caffe_axpy(count, -1.0f64, mem_ref.diff, mem_ref.data);
     }
 
-    pub fn asum_data(&self) -> f64 {
-        self.data.as_ref().map_or(0.0f64, |ptr| {
+    fn asum_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f64>>>>, count: i32) -> f64 {
+        mem.as_ref().map_or(0.0f64, |ptr| {
             let data = (*ptr).as_ref().borrow();
-            data.try_map_cpu_data(|slice| Blas::<f64>::caffe_cpu_asum(self.count as i32, slice))
+            data.try_map_cpu_data(|slice| Blas::<f64>::caffe_cpu_asum(count, slice))
                 .unwrap_or(0.0f64)
         })
+    }
+
+    pub fn asum_data(&self) -> f64 {
+        Self::asum_cpu(&self.data, self.count as i32)
+    }
+
+    pub fn asum_diff(&self) -> f64 {
+        Self::asum_cpu(&self.diff, self.count as i32)
+    }
+
+    fn sumsq_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f64>>>>, count: i32) -> f64 {
+        mem.as_ref().map_or(0.0f64, |ptr| {
+            let data = (*ptr).as_ref().borrow();
+            data.try_map_cpu_data(|slice| Blas::<f64>::caffe_cpu_dot(count, slice, slice))
+                .unwrap_or(0.0f64)
+        })
+    }
+
+    pub fn sumsq_data(&self) -> f64 {
+        Self::sumsq_cpu(&self.data, self.count as i32)
+    }
+
+    pub fn sumsq_diff(&self) -> f64 {
+        Self::sumsq_cpu(&self.diff, self.count as i32)
+    }
+
+    fn scale_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f64>>>>, count: i32, scale_factor: f64) {
+        if let Some(ref ptr) = mem {
+            let mut data = (*ptr).borrow_mut();
+            data.try_map_cpu_mut_data(|slice| Blas::<f64>::caffe_scal(count, scale_factor, slice));
+        }
+    }
+
+    pub fn scale_data(&mut self, scale_factor: f64) {
+        Self::scale_cpu(&self.data, self.count as i32, scale_factor)
+    }
+
+    pub fn scale_diff(&mut self, scale_factor: f64) {
+        Self::scale_cpu(&self.diff, self.count as i32, scale_factor)
     }
 }
