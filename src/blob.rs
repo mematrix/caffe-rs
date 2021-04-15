@@ -4,6 +4,7 @@ use std::cell::{RefCell, Ref, RefMut};
 
 use crate::synced_mem::{SyncedMemory, MemShared, MemPtr};
 use crate::util::math_functions::{Blas, CaffeUtil};
+use crate::proto::caffe;
 
 use std::borrow::Borrow;
 use std::option::Option::Some;
@@ -181,6 +182,16 @@ impl<T> Blob<T> where T: BlobType {
         self.reshape(other.shape());
     }
 
+    pub fn reshape_with(&mut self, shape: &caffe::BlobShape) {
+        check_le!(shape.get_dim().len() as i32, MAX_BLOB_AXES);
+
+        let mut shape_vec = Vec::with_capacity(shape.get_dim().len());
+        for &x in shape.get_dim() {
+            shape_vec.push(x as i32);
+        }
+        self.reshape(&shape_vec);
+    }
+
     pub fn cpu_data(&self) -> &[T] {
         let (ptr, count) = self.data.as_ref().unwrap().borrow_mut().cpu_data().raw_parts();
         unsafe { std::slice::from_raw_parts(ptr, count) }
@@ -310,6 +321,56 @@ impl<T> Blob<T> where T: BlobType {
         } else {
             CaffeUtil::caffe_copy(self.count, source.cpu_data(), self.mutable_cpu_data());
         }
+    }
+
+    // deprecated
+    pub fn legacy_shape(&self, index: i32) -> i32 {
+        check_le!(self.num_axes(), 4);
+        check_lt!(index, 4);
+        check_ge!(index, -4);
+
+        if index >= self.num_axes() || index < -self.num_axes() {
+            return 1;
+        }
+        self.shape_idx(index)
+    }
+
+    #[inline]
+    pub fn num(&self) -> i32 {
+        self.legacy_shape(0)
+    }
+
+    #[inline]
+    pub fn channels(&self) -> i32 {
+        self.legacy_shape(1)
+    }
+
+    #[inline]
+    pub fn height(&self) -> i32 {
+        self.legacy_shape(2)
+    }
+
+    #[inline]
+    pub fn width(&self) -> i32 {
+        self.legacy_shape(3)
+    }
+
+    pub fn shape_equals(&self, other: &caffe::BlobProto) -> bool {
+        if other.has_num() || other.has_channels() || other.has_height() || other.has_width() {
+            return self.num_axes() <= 4 &&
+                self.legacy_shape(-4) == other.get_num() &&
+                self.legacy_shape(-3) == other.get_channels() &&
+                self.legacy_shape(-2) == other.get_height() &&
+                self.legacy_shape(-1) == other.get_width();
+        }
+
+        let other_shape = other.get_shape().get_dim();
+        let mut shape_vec = Vec::with_capacity(other_shape.len());
+        for &x in other_shape {
+            shape_vec.push(x as i32);
+        }
+
+        self.shape == shape_vec
     }
 }
 

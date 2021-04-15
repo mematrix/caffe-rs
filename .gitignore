@@ -3,3 +3,6 @@ Cargo.lock
 
 # Jetbrains
 .idea/
+
+# explicit ignore the temp protobuf generated file
+src/proto/caffe.rs

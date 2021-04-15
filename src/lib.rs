@@ -2,6 +2,7 @@
 
 #[macro_use]
 mod macros;
+mod proto;
 mod util;
 mod synced_mem;
 mod blob;

@@ -9,7 +9,13 @@ edition = "2018"
 [dependencies]
 log = "0.4"
 cblas = "0.3"
+bytes = { version = "1.0" }
+protobuf = { version = "2", features = ["with-bytes"] }
 
 [dev-dependencies]
 env_logger = "*"
 test-env-log = "0.2"
+
+[build-dependencies]
+protobuf = { version = "2", features = ["with-bytes"] }
+protoc-rust = "2"
