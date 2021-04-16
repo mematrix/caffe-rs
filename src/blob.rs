@@ -8,11 +8,38 @@ use crate::proto::caffe;
 
 use std::borrow::Borrow;
 use std::option::Option::Some;
+use crate::proto::caffe::BlobProto;
 
+
+pub trait FromFloat: Copy {
+    fn from_f64(v: f64) -> Self;
+
+    fn from_f32(v: f32) -> Self;
+}
+
+impl FromFloat for f32 {
+    fn from_f64(v: f64) -> Self {
+        v as f32
+    }
+
+    fn from_f32(v: f32) -> Self {
+        v
+    }
+}
+
+impl FromFloat for f64 {
+    fn from_f64(v: f64) -> Self {
+        v
+    }
+
+    fn from_f32(v: f32) -> Self {
+        v as f64
+    }
+}
 
 /// A marker trait to be used in the type bound of `Blob`. It is explicitly marked as `unsafe` and
 /// only should be implemented for `f32` and `f64` currently.
-pub unsafe trait BlobType: Sized + Default + Copy {}
+pub unsafe trait BlobType: Default + FromFloat {}
 
 unsafe impl BlobType for f32 {}
 
@@ -372,6 +399,70 @@ impl<T> Blob<T> where T: BlobType {
 
         self.shape == shape_vec
     }
+
+    pub fn set_from_proto(&mut self, proto: &BlobProto, reshape: bool) {
+        if reshape {
+            let mut shape = Vec::new();
+            if proto.has_num() || proto.has_channels() || proto.has_height() || proto.has_width() {
+                shape.reserve(4);
+                shape.push(proto.get_num());
+                shape.push(proto.get_channels());
+                shape.push(proto.get_height());
+                shape.push(proto.get_width());
+            } else {
+                let other_shape = proto.get_shape().get_dim();
+                shape.reserve(other_shape.len());
+                for &x in other_shape {
+                    shape.push(x as i32);
+                }
+            }
+            self.reshape(&shape);
+        } else {
+            assert!(self.shape_equals(proto), "shape mismatch (reshape not set)");
+        }
+
+        {
+            // copy data
+            let count = self.count;
+            let mut data_vec = self.mutable_cpu_data();
+            if !proto.get_double_data().is_empty() {
+                let f64_data = proto.get_double_data();
+                check_eq!(count, f64_data.len());
+
+                for i in 0..count {
+                    data_vec[i] = T::from_f64(f64_data[i]);
+                }
+            } else {
+                let f32_data = proto.get_data();
+                check_eq!(count, f32_data.len());
+
+                for i in 0..count {
+                    data_vec[i] = T::from_f32(f32_data[i]);
+                }
+            }
+        }
+        {
+            // check if copy diff
+            let count = self.count;
+            if !proto.get_double_diff().is_empty() {
+                let f64_diff = proto.get_double_diff();
+                check_eq!(count, f64_diff.len());
+
+                let mut diff_vec = self.mutable_cpu_diff();
+                for i in 0..count {
+                    diff_vec[i] = T::from_f64(f64_diff[i]);
+                }
+            } else if !proto.get_diff().is_empty() {
+                let f32_diff = proto.get_diff();
+                check_eq!(count, f32_diff.len());
+
+                let mut diff_vec = self.mutable_cpu_diff();
+                for i in 0..count {
+                    diff_vec[i] = T::from_f32(f32_diff[i]);
+                }
+            }
+        }
+    }
 }
 
 impl Blob<f32> {
@@ -429,6 +520,33 @@ impl Blob<f32> {
     pub fn scale_diff(&mut self, scale_factor: f32) {
         Self::scale_cpu(&self.diff, self.count as i32, scale_factor)
     }
+
+    pub fn data_to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
+        proto.clear_shape();
+        {
+            let mut shape_dim = Vec::with_capacity(self.shape.len());
+            for &i in &self.shape {
+                shape_dim.push(i as i64);
+            }
+            proto.mut_shape().set_dim(shape_dim);
+        }
+
+        proto.clear_data();
+        proto.clear_diff();
+        {
+            let data_vec = self.cpu_data();
+            for &i in data_vec {
+                proto.mut_data().push(i);
+            }
+        }
+
+        if write_diff {
+            let diff_vec = self.cpu_diff();
+            for &i in diff_vec {
+                proto.mut_diff().push(i);
+            }
+        }
+    }
 }
 
 impl Blob<f64> {
@@ -483,5 +601,31 @@ impl Blob<f64> {
 
     pub fn scale_diff(&mut self, scale_factor: f64) {
         Self::scale_cpu(&self.diff, self.count as i32, scale_factor)
+    }
+
+    pub fn data_to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
+        proto.clear_shape();
+        {
+            let mut shape = proto.mut_shape();
+            for &i in &self.shape {
+                shape.mut_dim().push(i as i64);
+            }
+        }
+
+        proto.clear_double_data();
+        proto.clear_double_diff();
+        {
+            let data_vec = self.cpu_data();
+            for &i in data_vec {
+                proto.mut_double_data().push(i);
+            }
+        }
+
+        if write_diff {
+            let diff_vec = self.cpu_diff();
+            for &i in diff_vec {
+                proto.mut_double_diff().push(i);
+            }
+        }
     }
 }
