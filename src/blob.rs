@@ -1,45 +1,16 @@
 use std::boxed::Box;
 use std::rc::Rc;
 use std::cell::{RefCell, Ref, RefMut};
+use std::option::Option::Some;
 
 use crate::synced_mem::{SyncedMemory, MemShared, MemPtr};
-use crate::util::math_functions::{Blas, CaffeUtil};
-use crate::proto::caffe;
+use crate::util::math_functions::{Blas, CaffeUtil, CaffeNum};
+use crate::proto::caffe::{BlobProto, BlobShape};
 
-use std::borrow::Borrow;
-use std::option::Option::Some;
-use crate::proto::caffe::BlobProto;
-
-
-pub trait FromFloat: Copy {
-    fn from_f64(v: f64) -> Self;
-
-    fn from_f32(v: f32) -> Self;
-}
-
-impl FromFloat for f32 {
-    fn from_f64(v: f64) -> Self {
-        v as f32
-    }
-
-    fn from_f32(v: f32) -> Self {
-        v
-    }
-}
-
-impl FromFloat for f64 {
-    fn from_f64(v: f64) -> Self {
-        v
-    }
-
-    fn from_f32(v: f32) -> Self {
-        v as f64
-    }
-}
 
 /// A marker trait to be used in the type bound of `Blob`. It is explicitly marked as `unsafe` and
 /// only should be implemented for `f32` and `f64` currently.
-pub unsafe trait BlobType: Default + FromFloat {}
+pub unsafe trait BlobType: Default + CaffeNum {}
 
 unsafe impl BlobType for f32 {}
 
@@ -209,7 +180,7 @@ impl<T> Blob<T> where T: BlobType {
         self.reshape(other.shape());
     }
 
-    pub fn reshape_with(&mut self, shape: &caffe::BlobShape) {
+    pub fn reshape_with(&mut self, shape: &BlobShape) {
         check_le!(shape.get_dim().len() as i32, MAX_BLOB_AXES);
 
         let mut shape_vec = Vec::with_capacity(shape.get_dim().len());
@@ -382,7 +353,7 @@ impl<T> Blob<T> where T: BlobType {
         self.legacy_shape(3)
     }
 
-    pub fn shape_equals(&self, other: &caffe::BlobProto) -> bool {
+    pub fn shape_equals(&self, other: &BlobProto) -> bool {
         if other.has_num() || other.has_channels() || other.has_height() || other.has_width() {
             return self.num_axes() <= 4 &&
                 self.legacy_shape(-4) == other.get_num() &&
@@ -521,7 +492,7 @@ impl Blob<f32> {
         Self::scale_cpu(&self.diff, self.count as i32, scale_factor)
     }
 
-    pub fn data_to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
+    pub fn to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
         proto.clear_shape();
         {
             let mut shape_dim = Vec::with_capacity(self.shape.len());
@@ -603,7 +574,7 @@ impl Blob<f64> {
         Self::scale_cpu(&self.diff, self.count as i32, scale_factor)
     }
 
-    pub fn data_to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
+    pub fn to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
         proto.clear_shape();
         {
             let mut shape = proto.mut_shape();

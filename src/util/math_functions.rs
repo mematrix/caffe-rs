@@ -2,11 +2,62 @@ use cblas::{saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal};
 use std::marker::PhantomData;
 
 
-pub struct CaffeUtil<T: Sized> {
+pub trait CaffeNum : Copy + Sized {
+    fn is_zero(&self) -> bool;
+
+    fn from_f64(v: f64) -> Self;
+
+    fn from_f32(v: f32) -> Self;
+}
+
+impl CaffeNum for i32 {
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+
+    fn from_f64(v: f64) -> Self {
+        v as i32
+    }
+
+    fn from_f32(v: f32) -> Self {
+        v as i32
+    }
+}
+
+impl CaffeNum for f32 {
+    fn is_zero(&self) -> bool {
+        *self == 0f32
+    }
+
+    fn from_f64(v: f64) -> Self {
+        v as f32
+    }
+
+    fn from_f32(v: f32) -> Self {
+        v
+    }
+}
+
+impl CaffeNum for f64 {
+    fn is_zero(&self) -> bool {
+        *self == 0f64
+    }
+
+    fn from_f64(v: f64) -> Self {
+        v
+    }
+
+    fn from_f32(v: f32) -> Self {
+        v as f64
+    }
+}
+
+
+pub struct CaffeUtil<T: CaffeNum> {
     _phantom: PhantomData<T>,
 }
 
-impl<T: Sized + Copy> CaffeUtil<T> {
+impl<T: CaffeNum> CaffeUtil<T> {
     pub fn caffe_copy(n: usize, x: &[T], y: &mut [T]) {
         if x.as_ptr() != y.as_ptr() {
             debug_assert!(x.len() >= n && y.len() >= n);
@@ -14,7 +65,19 @@ impl<T: Sized + Copy> CaffeUtil<T> {
             y[..n].copy_from_slice(&x[..n]);
         }
     }
+
+    pub fn caffe_set(n: usize, alpha: T, y: &mut [T]) {
+        assert!(y.len() >= n);
+        if alpha.is_zero() {
+            unsafe { std::ptr::write_bytes(y.as_mut_ptr(), 0u8, n); }
+        } else {
+            for x in &mut y[0..n] {
+                *x = alpha;
+            }
+        }
+    }
 }
+
 
 pub struct Blas<T: Sized> {
     _phantom: PhantomData<T>,

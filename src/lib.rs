@@ -6,6 +6,7 @@ mod proto;
 mod util;
 mod synced_mem;
 mod blob;
+mod layer;
 
 #[cfg(test)]
 mod tests {
