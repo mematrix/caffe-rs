@@ -2,7 +2,7 @@ use cblas::{saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal};
 use std::marker::PhantomData;
 
 
-pub trait CaffeNum : Copy + Sized {
+pub trait CaffeNum : Copy + Sized + std::ops::AddAssign {
     fn is_zero(&self) -> bool;
 
     fn from_f64(v: f64) -> Self;
@@ -79,8 +79,24 @@ impl<T: CaffeNum> CaffeUtil<T> {
 }
 
 
+pub trait BlasOp<T: Sized> {
+    fn caffe_cpu_dot(n: i32, x: &[T], y: &[T]) -> T;
+}
+
 pub struct Blas<T: Sized> {
     _phantom: PhantomData<T>,
+}
+
+impl<T: Sized> BlasOp<T> for Blas<T> {
+    default fn caffe_cpu_dot(n: i32, x: &[T], y: &[T]) -> T {
+        unimplemented!();
+    }
+}
+
+impl BlasOp<f32> for Blas<f32> {
+    fn caffe_cpu_dot(n: i32, x: &[f32], y: &[f32]) -> f32 {
+        Self::caffe_cpu_strided_dot(n, x, 1, y, 1)
+    }
 }
 
 impl Blas<f32> {
@@ -96,12 +112,14 @@ impl Blas<f32> {
         unsafe { sdot(n, x, inc_x, y, inc_y) }
     }
 
-    pub fn caffe_cpu_dot(n: i32, x: &[f32], y: &[f32]) -> f32 {
-        Self::caffe_cpu_strided_dot(n, x, 1, y, 1)
-    }
-
     pub fn caffe_scal(n: i32, alpha: f32, x: &mut [f32]) {
         unsafe { sscal(n, alpha, x, 1) }
+    }
+}
+
+impl BlasOp<f64> for Blas<f64> {
+    fn caffe_cpu_dot(n: i32, x: &[f64], y: &[f64]) -> f64 {
+        Self::caffe_cpu_strided_dot(n, x, 1, y, 1)
     }
 }
 
@@ -116,10 +134,6 @@ impl Blas<f64> {
 
     pub fn caffe_cpu_strided_dot(n: i32, x: &[f64], inc_x: i32, y: &[f64], inc_y: i32) -> f64 {
         unsafe { ddot(n, x, inc_x, y, inc_y) }
-    }
-
-    pub fn caffe_cpu_dot(n: i32, x: &[f64], y: &[f64]) -> f64 {
-        Self::caffe_cpu_strided_dot(n, x, 1, y, 1)
     }
 
     pub fn caffe_scal(n: i32, alpha: f64, x: &mut [f64]) {

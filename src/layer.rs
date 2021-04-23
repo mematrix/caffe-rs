@@ -3,8 +3,9 @@ use std::boxed::Box;
 use std::cell::{RefCell, Ref, RefMut};
 
 use crate::proto::caffe;
-use crate::blob::{Blob, BlobType};
-use crate::util::math_functions::CaffeUtil;
+use crate::blob::{Blob, BlobType, BlobMemRef, BlobOp};
+use crate::util::math_functions::{CaffeUtil, BlasOp, Blas};
+use protobuf::Clear;
 
 
 #[derive(Clone, Default)]
@@ -54,12 +55,17 @@ pub trait CaffeLayer<T: BlobType> {
 
     fn get_impl_mut(&mut self) -> &mut LayerImpl<T>;
 
-    fn layer_setup(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) {}
+    fn layer_setup(&mut self, _bottom: &BlobVec<T>, _top: &BlobVec<T>) {}
 
     fn reshape(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>);
 
     fn to_proto(&self, param: &mut caffe::LayerParameter, write_diff: bool) {
-        //
+        param.clear();
+        param.clone_from(&self.get_impl().layer_param);
+        param.clear_blobs();
+        for blob in &self.get_impl().blobs.0 {
+            RefCell::borrow(blob.as_ref()).to_proto(param.mut_blobs().push_default(), write_diff);
+        }
     }
 
     fn layer_type(&self) -> &'static str {
@@ -165,8 +171,23 @@ impl<T: BlobType> Layer<T> {
         }
     }
 
+    /// Implements common layer setup functionality.
+    /// * `bottom`: the pre-shaped input blobs
+    /// * `top`: the allocated but unshaped output blobs, to be shaped by Reshape
+    ///
+    /// Checks that the number of bottom and top blobs is correct.
+    /// Calls [`layer_setup`][layer_setup] to do special layer setup for individual layer types,
+    /// followed by [`reshape`][reshape] to set up sizes of top blobs and internal buffers.
+    /// Sets up the loss weight multiplier blobs for any non-zero loss weights.
+    /// This method may not be overridden.
+    ///
+    /// [layer_setup]: caffe_rs::Layer::layer_setup
+    /// [reshape]: caffe_rs::Layer::reshape
     pub fn setup(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
-        // todo
+        self.layer.check_blob_counts(bottom, top);
+        self.layer_setup(bottom, top);
+        self.reshape(bottom, top);
+        self.set_loss_weights(top);
     }
 
     pub fn layer_setup(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
@@ -178,18 +199,28 @@ impl<T: BlobType> Layer<T> {
     }
 
     pub fn forward(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) -> T {
-        let loss = T::from_f32(0f32);
+        let mut loss = T::from_f32(0f32);
         self.reshape(bottom, top);
 
         // CPU mode
         self.layer.forward_cpu(bottom, top);
-        // todo: for
+        for top_id in 0..top.0.len() {
+            if self.loss(top_id).is_zero() {
+                continue;
+            }
+
+            let blob = RefCell::borrow(top.0[top_id].as_ref());
+            let count = blob.count();
+            let BlobMemRef{data, diff} = blob.cpu_mem_ref();
+            loss += Blas::<T>::caffe_cpu_dot(count as i32, data, diff);
+        }
 
         loss
     }
 
     pub fn backward(&mut self, top: &BlobVec<T>, propagate_down: &Vec<bool>, bottom: &BlobVec<T>) {
-        //
+        // CPU mode
+        self.layer.backward_cpu(top, propagate_down, bottom);
     }
 
     pub fn blobs(&mut self) -> &mut BlobVec<T> {

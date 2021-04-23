@@ -4,7 +4,7 @@ use std::cell::{RefCell, Ref, RefMut};
 use std::option::Option::Some;
 
 use crate::synced_mem::{SyncedMemory, MemShared, MemPtr};
-use crate::util::math_functions::{Blas, CaffeUtil, CaffeNum};
+use crate::util::math_functions::{Blas, BlasOp, CaffeUtil, CaffeNum};
 use crate::proto::caffe::{BlobProto, BlobShape};
 
 
@@ -27,8 +27,15 @@ pub struct BlobMemRefMut<'a, T> {
     pub diff: &'a mut [T],
 }
 
-/// A wrapper around `SyncedMemory` holders serving as the basic computational unit
+/// Used for specialization of some functions.
+pub trait BlobOp<T> {
+    fn to_proto(&self, proto: &mut BlobProto, write_diff: bool);
+}
+
+/// A wrapper around [`SyncedMemory`][SyncedMemory] holders serving as the basic computational unit
 /// through which `Layer`, `Net` <strike>and `Solver`</strike> interact.
+///
+/// [SyncedMemory]: caffe_rs::synced_mem::SyncedMemory
 #[derive(Default)]
 pub struct Blob<T: BlobType> {
     data: Option<Rc<RefCell<SyncedMemory<T>>>>,
@@ -436,6 +443,69 @@ impl<T> Blob<T> where T: BlobType {
     }
 }
 
+impl<T: BlobType> BlobOp<T> for Blob<T> {
+    default fn to_proto(&self, _proto: &mut BlobProto, _write_diff: bool) {
+        unimplemented!();
+    }
+}
+
+impl BlobOp<f32> for Blob<f32> {
+    fn to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
+        proto.clear_shape();
+        {
+            let mut shape_dim = Vec::with_capacity(self.shape.len());
+            for &i in &self.shape {
+                shape_dim.push(i as i64);
+            }
+            proto.mut_shape().set_dim(shape_dim);
+        }
+
+        proto.clear_data();
+        proto.clear_diff();
+        {
+            let data_vec = self.cpu_data();
+            for &i in data_vec {
+                proto.mut_data().push(i);
+            }
+        }
+
+        if write_diff {
+            let diff_vec = self.cpu_diff();
+            for &i in diff_vec {
+                proto.mut_diff().push(i);
+            }
+        }
+    }
+}
+
+impl BlobOp<f64> for Blob<f64> {
+    fn to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
+        proto.clear_shape();
+        {
+            let mut shape = proto.mut_shape();
+            for &i in &self.shape {
+                shape.mut_dim().push(i as i64);
+            }
+        }
+
+        proto.clear_double_data();
+        proto.clear_double_diff();
+        {
+            let data_vec = self.cpu_data();
+            for &i in data_vec {
+                proto.mut_double_data().push(i);
+            }
+        }
+
+        if write_diff {
+            let diff_vec = self.cpu_diff();
+            for &i in diff_vec {
+                proto.mut_double_diff().push(i);
+            }
+        }
+    }
+}
+
 impl Blob<f32> {
     pub fn update(&mut self) {
         let count = self.count as i32;
@@ -491,33 +561,6 @@ impl Blob<f32> {
     pub fn scale_diff(&mut self, scale_factor: f32) {
         Self::scale_cpu(&self.diff, self.count as i32, scale_factor)
     }
-
-    pub fn to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
-        proto.clear_shape();
-        {
-            let mut shape_dim = Vec::with_capacity(self.shape.len());
-            for &i in &self.shape {
-                shape_dim.push(i as i64);
-            }
-            proto.mut_shape().set_dim(shape_dim);
-        }
-
-        proto.clear_data();
-        proto.clear_diff();
-        {
-            let data_vec = self.cpu_data();
-            for &i in data_vec {
-                proto.mut_data().push(i);
-            }
-        }
-
-        if write_diff {
-            let diff_vec = self.cpu_diff();
-            for &i in diff_vec {
-                proto.mut_diff().push(i);
-            }
-        }
-    }
 }
 
 impl Blob<f64> {
@@ -572,31 +615,5 @@ impl Blob<f64> {
 
     pub fn scale_diff(&mut self, scale_factor: f64) {
         Self::scale_cpu(&self.diff, self.count as i32, scale_factor)
-    }
-
-    pub fn to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
-        proto.clear_shape();
-        {
-            let mut shape = proto.mut_shape();
-            for &i in &self.shape {
-                shape.mut_dim().push(i as i64);
-            }
-        }
-
-        proto.clear_double_data();
-        proto.clear_double_diff();
-        {
-            let data_vec = self.cpu_data();
-            for &i in data_vec {
-                proto.mut_double_data().push(i);
-            }
-        }
-
-        if write_diff {
-            let diff_vec = self.cpu_diff();
-            for &i in diff_vec {
-                proto.mut_double_diff().push(i);
-            }
-        }
     }
 }
