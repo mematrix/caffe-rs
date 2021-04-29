@@ -1,6 +1,7 @@
-#![feature(specialization)]
+#![feature(min_specialization)]
 
 #[macro_use] extern crate log;
+#[macro_use] extern crate static_init;
 
 #[macro_use]
 mod macros;
@@ -9,6 +10,7 @@ mod util;
 mod synced_mem;
 mod blob;
 mod layer;
+mod layer_factory;
 
 #[cfg(test)]
 mod tests {
