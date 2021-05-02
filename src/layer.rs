@@ -2,14 +2,19 @@ use std::rc::Rc;
 use std::boxed::Box;
 use std::cell::{RefCell, Ref, RefMut};
 
+use crate::common::{Caffe, CaffeBrew};
 use crate::proto::caffe;
 use crate::blob::{Blob, BlobType, BlobMemRef, BlobOp};
 use crate::util::math_functions::{CaffeUtil, BlasOp, Blas};
 use protobuf::Clear;
 
 
-#[derive(Clone, Default)]
-pub struct BlobVec<T: BlobType>(Vec<Rc<RefCell<Blob<T>>>>);
+/// A typedef for **shared_ptr** of `Blob<T>`.
+pub type SharedBlob<T> = Rc<RefCell<Blob<T>>>;
+
+/// A typedef of **vector of blob**.
+pub type BlobVec<T> = Vec<SharedBlob<T>>;
+
 
 #[derive(Clone, Default)]
 pub struct LayerImpl<T: BlobType> {
@@ -36,12 +41,12 @@ impl<T: BlobType> LayerImpl<T> {
         // Set phase and copy blobs (if there are any).
         layer.phase = param.get_phase();
         if !layer.layer_param.get_blobs().is_empty() {
-            layer.blobs.0.reserve(layer.layer_param.get_blobs().len());
+            layer.blobs.reserve(layer.layer_param.get_blobs().len());
             for x in layer.layer_param.get_blobs() {
                 let mut blob = Blob::new();
                 blob.set_from_proto(x, true);
                 let blob = Rc::new(RefCell::new(blob));
-                layer.blobs.0.push(blob);
+                layer.blobs.push(blob);
             }
         }
 
@@ -63,7 +68,7 @@ pub trait CaffeLayer<T: BlobType> {
         param.clear();
         param.clone_from(&self.get_impl().layer_param);
         param.clear_blobs();
-        for blob in &self.get_impl().blobs.0 {
+        for blob in &self.get_impl().blobs {
             RefCell::borrow(blob.as_ref()).to_proto(param.mut_blobs().push_default(), write_diff);
         }
     }
@@ -123,36 +128,36 @@ pub trait CaffeLayer<T: BlobType> {
     fn check_blob_counts(&self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
         if self.exact_num_bottom_blobs() >= 0 {
             let num = self.exact_num_bottom_blobs();
-            check_eq!(num, bottom.0.len() as i32, "{} Layer takes {} bottom blob(s) as input.",
+            check_eq!(num, bottom.len() as i32, "{} Layer takes {} bottom blob(s) as input.",
                       self.layer_type(), num);
         }
         if self.min_bottom_blobs() >= 0 {
             let num = self.min_bottom_blobs();
-            check_le!(num, bottom.0.len() as i32, "{} Layer takes at least {} bottom blob(s) as input.",
+            check_le!(num, bottom.len() as i32, "{} Layer takes at least {} bottom blob(s) as input.",
                       self.layer_type(), num);
         }
         if self.max_bottom_blobs() >= 0 {
             let num = self.max_bottom_blobs();
-            check_ge!(num, bottom.0.len() as i32, "{} Layer takes at most {} bottom blob(s) as input.",
+            check_ge!(num, bottom.len() as i32, "{} Layer takes at most {} bottom blob(s) as input.",
                       self.layer_type(), num);
         }
         if self.exact_num_top_blobs() >= 0 {
             let num = self.exact_num_top_blobs();
-            check_eq!(num, top.0.len() as i32, "{} Layer produces {} top blob(s) as output.",
+            check_eq!(num, top.len() as i32, "{} Layer produces {} top blob(s) as output.",
                       self.layer_type(), num);
         }
         if self.min_top_blobs() >= 0 {
             let num = self.min_top_blobs();
-            check_le!(num, top.0.len() as i32, "{} Layer produces at least {} top blob(s) as output.",
+            check_le!(num, top.len() as i32, "{} Layer produces at least {} top blob(s) as output.",
                       self.layer_type(), num);
         }
         if self.max_top_blobs() >= 0 {
             let num = self.max_top_blobs();
-            check_ge!(num, top.0.len() as i32, "{} Layer produces at most {} top blob(s) as output.",
+            check_ge!(num, top.len() as i32, "{} Layer produces at most {} top blob(s) as output.",
                       self.layer_type(), num);
         }
         if self.equal_num_bottom_top_blobs() {
-            check_eq!(bottom.0.len(), top.0.len(),
+            check_eq!(bottom.len(), top.len(),
                       "{} Layer produces one top blob as output for each bottom blob input.",
                       self.layer_type());
         }
@@ -202,25 +207,41 @@ impl<T: BlobType> Layer<T> {
         let mut loss = T::from_f32(0f32);
         self.reshape(bottom, top);
 
-        // CPU mode
-        self.layer.forward_cpu(bottom, top);
-        for top_id in 0..top.0.len() {
-            if self.loss(top_id).is_zero() {
-                continue;
-            }
+        match Caffe::mode() {
+            CaffeBrew::CPU => {
+                // CPU mode
+                self.layer.forward_cpu(bottom, top);
+                for top_id in 0..top.len() {
+                    if self.loss(top_id).is_zero() {
+                        continue;
+                    }
 
-            let blob = RefCell::borrow(top.0[top_id].as_ref());
-            let count = blob.count();
-            let BlobMemRef{data, diff} = blob.cpu_mem_ref();
-            loss += Blas::<T>::caffe_cpu_dot(count as i32, data, diff);
+                    let blob = RefCell::borrow(top[top_id].as_ref());
+                    let count = blob.count();
+                    let BlobMemRef{data, diff} = blob.cpu_mem_ref();
+                    loss += Blas::<T>::caffe_cpu_dot(count as i32, data, diff);
+                }
+            }
+            CaffeBrew::GPU => {
+                self.layer.forward_gpu(bottom, top);
+                unimplemented!();
+            }
         }
 
         loss
     }
 
     pub fn backward(&mut self, top: &BlobVec<T>, propagate_down: &Vec<bool>, bottom: &BlobVec<T>) {
-        // CPU mode
-        self.layer.backward_cpu(top, propagate_down, bottom);
+        match Caffe::mode() {
+            CaffeBrew::CPU => {
+                // CPU mode
+                self.layer.backward_cpu(top, propagate_down, bottom);
+            }
+            CaffeBrew::GPU => {
+                // GPU mode
+                self.layer.backward_gpu(top, propagate_down, bottom);
+            }
+        }
     }
 
     pub fn blobs(&mut self) -> &mut BlobVec<T> {
@@ -317,16 +338,16 @@ impl<T: BlobType> Layer<T> {
             return;
         }
 
-        check_eq!(top.0.len(), num_loss_weights, "loss_weight must be unspecified or specified once per top blob.");
+        check_eq!(top.len(), num_loss_weights, "loss_weight must be unspecified or specified once per top blob.");
 
-        for top_id in 0..top.0.len() {
+        for top_id in 0..top.len() {
             let loss_weight = self.layer.get_impl().layer_param.get_loss_weight()[top_id];
             if loss_weight == 0f32 {
                 continue;
             }
 
             self.set_loss(top_id, T::from_f32(loss_weight));
-            let mut blob = top.0[top_id].borrow_mut();
+            let mut blob = top[top_id].borrow_mut();
             let count = blob.count();
             let loss_multiplier = blob.mutable_cpu_diff();
             CaffeUtil::caffe_set(count, T::from_f32(loss_weight), loss_multiplier);

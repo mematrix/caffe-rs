@@ -7,6 +7,7 @@
 mod macros;
 mod proto;
 mod util;
+mod common;
 mod synced_mem;
 mod blob;
 mod layer;

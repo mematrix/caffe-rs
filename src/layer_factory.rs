@@ -31,8 +31,6 @@ impl<T: BlobType> LayerRegistry<T> {
     }
 
     pub fn create_layer(&self, param: &LayerParameter) -> Rc<RefCell<Layer<T>>> {
-        // todo: add caffe::root_solver()
-
         let ty = param.get_field_type();
         match self.registry.get(ty) {
             Some(creator) => creator(param),
@@ -118,7 +116,7 @@ macro_rules! register_layer_class {
         paste! {
             pub fn [<create_ $t:snake layer>]<T: 'static + $crate::blob::BlobType>(param: &crate::proto::caffe::LayerParameter)
                 -> std::rc::Rc<std::cell::RefCell<$crate::layer::Layer<T>>> {
-                std::rc::Rc::new(std::cell::RefCell::new($crate::layer::Layer::new(Box::new($t::<T>::new(param)))))
+                std::rc::Rc::new(std::cell::RefCell::new($crate::layer::Layer::new(Box::new([<$t Layer>]::<T>::new(param)))))
             }
 
             register_layer_creator!($t, self::[<create_ $t:snake layer>]);
@@ -173,5 +171,5 @@ mod test {
         }
     }
 
-    register_layer_class!(TestLayer);
+    register_layer_class!(Test);
 }
