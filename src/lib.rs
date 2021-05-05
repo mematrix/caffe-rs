@@ -12,6 +12,7 @@ mod synced_mem;
 mod blob;
 mod layer;
 mod layer_factory;
+mod net;
 
 #[cfg(test)]
 mod tests {

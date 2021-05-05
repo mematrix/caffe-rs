@@ -15,6 +15,12 @@ pub type SharedBlob<T> = Rc<RefCell<Blob<T>>>;
 /// A typedef of **vector of blob**.
 pub type BlobVec<T> = Vec<SharedBlob<T>>;
 
+/// A typedef for **shared_ptr** of `Layer<T>`.
+pub type SharedLayer<T> = Rc<RefCell<Layer<T>>>;
+
+/// A typedef of **vector of layer**.
+pub type LayerVec<T> = Vec<SharedLayer<T>>;
+
 
 #[derive(Clone, Default)]
 pub struct LayerImpl<T: BlobType> {
@@ -109,7 +115,7 @@ pub trait CaffeLayer<T: BlobType> {
         false
     }
 
-    fn allow_force_backward(&self, _bottom_index: i32) -> bool {
+    fn allow_force_backward(&self, _bottom_index: usize) -> bool {
         true
     }
 
@@ -244,7 +250,11 @@ impl<T: BlobType> Layer<T> {
         }
     }
 
-    pub fn blobs(&mut self) -> &mut BlobVec<T> {
+    pub fn blobs(&self) -> &BlobVec<T> {
+        &self.layer.get_impl().blobs
+    }
+
+    pub fn blobs_mut(&mut self) -> &mut BlobVec<T> {
         &mut self.layer.get_impl_mut().blobs
     }
 
@@ -310,7 +320,7 @@ impl<T: BlobType> Layer<T> {
         self.layer.auto_top_blobs()
     }
 
-    pub fn allow_force_backward(&self, bottom_index: i32) -> bool {
+    pub fn allow_force_backward(&self, bottom_index: usize) -> bool {
         self.layer.allow_force_backward(bottom_index)
     }
 
