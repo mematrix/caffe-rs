@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use static_init::dynamic;
 
 
+#[derive(Copy, Clone)]
 pub enum CaffeBrew {
     CPU,
     GPU,
@@ -34,13 +35,13 @@ thread_local! {
 impl Caffe {
     pub fn mode() -> CaffeBrew {
         CAFFE.with(|f| {
-            *f.borrow().mode
+            f.borrow().mode
         })
     }
 
     pub fn set_mode(mode: CaffeBrew) {
         CAFFE.with(|f| {
-            *f.borrow_mut().mode = mode;
+            (*f.borrow_mut()).mode = mode;
         });
     }
 
@@ -70,43 +71,43 @@ impl Caffe {
 
     pub fn solver_count() -> i32 {
         CAFFE.with(|f| {
-            *f.borrow().solver_count
+            f.borrow().solver_count
         })
     }
 
     pub fn set_solver_count(val: i32) {
         CAFFE.with(|f| {
-            *f.borrow_mut().solver_count = val;
+            f.borrow_mut().solver_count = val;
         });
     }
 
     pub fn solver_rank() -> i32 {
         CAFFE.with(|f| {
-            *f.borrow().solver_rank
+            f.borrow().solver_rank
         })
     }
 
     pub fn set_solver_rank(val: i32) {
         CAFFE.with(|f| {
-            *f.borrow_mut().solver_rank = val;
+            f.borrow_mut().solver_rank = val;
         });
     }
 
     pub fn multiprocess() -> bool {
         CAFFE.with(|f| {
-            *f.borrow().multiprocess
+            f.borrow().multiprocess
         })
     }
 
     pub fn set_multiprocess(val: bool) {
         CAFFE.with(|f| {
-            *f.borrow_mut().multiprocess = val;
+            f.borrow_mut().multiprocess = val;
         });
     }
 
     pub fn root_solver() -> bool {
         CAFFE.with(|f| {
-            *f.borrow().solver_rank
+            f.borrow().solver_rank
         }) == 0
     }
 }

@@ -29,6 +29,16 @@ pub struct BlobMemRefMut<'a, T> {
 
 /// Used for specialization of some functions.
 pub trait BlobOp<T> {
+    fn update(&mut self);
+
+    fn asum_data(&self) -> T;
+
+    fn asum_diff(&self) -> T;
+
+    fn sumsq_data(&self) -> T;
+
+    fn sumsq_diff(&self) -> T;
+
     fn to_proto(&self, proto: &mut BlobProto, write_diff: bool);
 }
 
@@ -444,12 +454,64 @@ impl<T> Blob<T> where T: BlobType {
 }
 
 impl<T: BlobType> BlobOp<T> for Blob<T> {
+    default fn update(&mut self) {
+        unimplemented!();
+    }
+
+    default fn asum_data(&self) -> T {
+        unimplemented!();
+    }
+
+    default fn asum_diff(&self) -> T {
+       unimplemented!();
+    }
+
+    default fn sumsq_data(&self) -> T {
+        unimplemented!();
+    }
+
+    default fn sumsq_diff(&self) -> T {
+        unimplemented!();
+    }
+
     default fn to_proto(&self, _proto: &mut BlobProto, _write_diff: bool) {
         unimplemented!();
     }
 }
 
 impl BlobOp<f32> for Blob<f32> {
+    fn update(&mut self) {
+        let count = self.count as i32;
+        let mem_ref = self.mutable_cpu_mem_ref();
+        Blas::<f32>::caffe_axpy(count, -1.0f32, mem_ref.diff, mem_ref.data);
+    }
+
+    fn asum_data(&self) -> f32 {
+        if let Some(ref ptr) = self.data {
+            let data = (*ptr).as_ref().borrow();
+            data.try_map_cpu_data(|slice| Blas::<f32>::caffe_cpu_asum(self.count as i32, slice))
+                .unwrap_or(0.0f32)
+        } else {
+            0.0f32
+        }
+    }
+
+    fn asum_diff(&self) -> f32 {
+        self.diff.as_ref().map_or(0.0f32, |ptr| {
+            let data = (*ptr).as_ref().borrow();
+            data.try_map_cpu_data(|slice| Blas::<f32>::caffe_cpu_asum(self.count as i32, slice))
+                .unwrap_or(0.0f32)
+        })
+    }
+
+    fn sumsq_data(&self) -> f32 {
+        Self::sumsq_cpu(&self.data, self.count as i32)
+    }
+
+    fn sumsq_diff(&self) -> f32 {
+        Self::sumsq_cpu(&self.diff, self.count as i32)
+    }
+
     fn to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
         proto.clear_shape();
         {
@@ -479,6 +541,28 @@ impl BlobOp<f32> for Blob<f32> {
 }
 
 impl BlobOp<f64> for Blob<f64> {
+    fn update(&mut self) {
+        let count = self.count as i32;
+        let mem_ref = self.mutable_cpu_mem_ref();
+        Blas::<f64>::caffe_axpy(count, -1.0f64, mem_ref.diff, mem_ref.data);
+    }
+
+    fn asum_data(&self) -> f64 {
+        Self::asum_cpu(&self.data, self.count as i32)
+    }
+
+    fn asum_diff(&self) -> f64 {
+        Self::asum_cpu(&self.diff, self.count as i32)
+    }
+
+    fn sumsq_data(&self) -> f64 {
+        Self::sumsq_cpu(&self.data, self.count as i32)
+    }
+
+    fn sumsq_diff(&self) -> f64 {
+        Self::sumsq_cpu(&self.diff, self.count as i32)
+    }
+
     fn to_proto(&self, proto: &mut BlobProto, write_diff: bool) {
         proto.clear_shape();
         {
@@ -507,44 +591,12 @@ impl BlobOp<f64> for Blob<f64> {
 }
 
 impl Blob<f32> {
-    pub fn update(&mut self) {
-        let count = self.count as i32;
-        let mem_ref = self.mutable_cpu_mem_ref();
-        Blas::<f32>::caffe_axpy(count, -1.0f32, mem_ref.diff, mem_ref.data);
-    }
-
-    pub fn asum_data(&self) -> f32 {
-        if let Some(ref ptr) = self.data {
-            let data = (*ptr).as_ref().borrow();
-            data.try_map_cpu_data(|slice| Blas::<f32>::caffe_cpu_asum(self.count as i32, slice))
-                .unwrap_or(0.0f32)
-        } else {
-            0.0f32
-        }
-    }
-
-    pub fn asum_diff(&self) -> f32 {
-        self.diff.as_ref().map_or(0.0f32, |ptr| {
-            let data = (*ptr).as_ref().borrow();
-            data.try_map_cpu_data(|slice| Blas::<f32>::caffe_cpu_asum(self.count as i32, slice))
-                .unwrap_or(0.0f32)
-        })
-    }
-
     fn sumsq_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f32>>>>, count: i32) -> f32 {
         mem.as_ref().map_or(0.0f32, |ptr| {
             let data = (*ptr).as_ref().borrow();
             data.try_map_cpu_data(|slice| Blas::<f32>::caffe_cpu_dot(count, slice, slice))
                 .unwrap_or(0.0f32)
         })
-    }
-
-    pub fn sumsq_data(&self) -> f32 {
-        Self::sumsq_cpu(&self.data, self.count as i32)
-    }
-
-    pub fn sumsq_diff(&self) -> f32 {
-        Self::sumsq_cpu(&self.diff, self.count as i32)
     }
 
     fn scale_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f32>>>>, count: i32, scale_factor: f32) {
@@ -564,12 +616,6 @@ impl Blob<f32> {
 }
 
 impl Blob<f64> {
-    pub fn update(&mut self) {
-        let count = self.count as i32;
-        let mem_ref = self.mutable_cpu_mem_ref();
-        Blas::<f64>::caffe_axpy(count, -1.0f64, mem_ref.diff, mem_ref.data);
-    }
-
     fn asum_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f64>>>>, count: i32) -> f64 {
         mem.as_ref().map_or(0.0f64, |ptr| {
             let data = (*ptr).as_ref().borrow();
@@ -578,28 +624,12 @@ impl Blob<f64> {
         })
     }
 
-    pub fn asum_data(&self) -> f64 {
-        Self::asum_cpu(&self.data, self.count as i32)
-    }
-
-    pub fn asum_diff(&self) -> f64 {
-        Self::asum_cpu(&self.diff, self.count as i32)
-    }
-
     fn sumsq_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f64>>>>, count: i32) -> f64 {
         mem.as_ref().map_or(0.0f64, |ptr| {
             let data = (*ptr).as_ref().borrow();
             data.try_map_cpu_data(|slice| Blas::<f64>::caffe_cpu_dot(count, slice, slice))
                 .unwrap_or(0.0f64)
         })
-    }
-
-    pub fn sumsq_data(&self) -> f64 {
-        Self::sumsq_cpu(&self.data, self.count as i32)
-    }
-
-    pub fn sumsq_diff(&self) -> f64 {
-        Self::sumsq_cpu(&self.diff, self.count as i32)
     }
 
     fn scale_cpu(mem: &Option<Rc<RefCell<SyncedMemory<f64>>>>, count: i32, scale_factor: f64) {

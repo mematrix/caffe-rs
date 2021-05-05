@@ -1,13 +1,20 @@
 use cblas::{saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal};
 use std::marker::PhantomData;
+use std::ops::{AddAssign, Div};
 
 
-pub trait CaffeNum : Copy + Sized + std::ops::AddAssign {
+pub trait CaffeNum : Copy + Sized + AddAssign + Div {
     fn is_zero(&self) -> bool;
 
     fn from_f64(v: f64) -> Self;
 
     fn from_f32(v: f32) -> Self;
+
+    fn from_usize(v: usize) -> Self;
+
+    fn from_div(v: <Self as Div<Self>>::Output) -> Self;
+
+    fn sqrt(v: Self) -> Self;
 }
 
 impl CaffeNum for i32 {
@@ -21,6 +28,18 @@ impl CaffeNum for i32 {
 
     fn from_f32(v: f32) -> Self {
         v as i32
+    }
+
+    fn from_usize(v: usize) -> Self {
+        v as i32
+    }
+
+    fn from_div(v: Self::Output) -> Self {
+        v
+    }
+
+    fn sqrt(v: Self) -> Self {
+        (v as f64).sqrt() as i32
     }
 }
 
@@ -36,6 +55,18 @@ impl CaffeNum for f32 {
     fn from_f32(v: f32) -> Self {
         v
     }
+
+    fn from_usize(v: usize) -> Self {
+        v as f32
+    }
+
+    fn from_div(v: Self::Output) -> Self {
+        v
+    }
+
+    fn sqrt(v: Self) -> Self {
+        v.sqrt()
+    }
 }
 
 impl CaffeNum for f64 {
@@ -49,6 +80,18 @@ impl CaffeNum for f64 {
 
     fn from_f32(v: f32) -> Self {
         v as f64
+    }
+
+    fn from_usize(v: usize) -> Self {
+        v as f64
+    }
+
+    fn from_div(v: Self::Output) -> Self {
+        v
+    }
+
+    fn sqrt(v: Self) -> Self {
+        v.sqrt()
     }
 }
 

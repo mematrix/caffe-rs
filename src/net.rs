@@ -9,7 +9,8 @@ use crate::layer::{Layer, SharedBlob, BlobVec, SharedLayer, LayerVec};
 use crate::layer_factory::{LayerRegister, LayerRegistry};
 use crate::proto::caffe::{Phase, NetParameter, NetState, NetStateRule, ParamSpec, ParamSpec_DimCheckMode};
 use crate::util::insert_splits::{insert_splits};
-use protobuf::Chars;
+use protobuf::{Chars, Clear};
+use crate::util::math_functions::CaffeUtil;
 
 
 /// Callback invoked at specific points during at iteration.
@@ -348,10 +349,10 @@ impl<T: BlobType> Net<T> {
             self.net_output_blob_indices.push(idx);
         }
         for blob_id in 0..self.blob_names.len() {
-            self.blob_names_index[&self.blob_names[blob_id]] = blob_id;
+            self.blob_names_index.insert(self.blob_names[blob_id].clone(), blob_id);
         }
         for layer_id in 0..self.layer_names.len() {
-            self.layer_names_index[&self.layer_names[layer_id]] = layer_id;
+            self.layer_names_index.insert(self.layer_names[layer_id].clone(), layer_id);
         }
 
         self.share_weights();
@@ -362,9 +363,15 @@ impl<T: BlobType> Net<T> {
     }
 
     pub fn forward(&mut self, loss: &mut Option<T>) -> &BlobVec<T> {
-        //
+        let v = self.forward_from_to(0, self.layers.len() - 1usize);
+        if loss.is_some() {
+            loss.replace(v);
+        }
+
+        &self.net_output_blobs
     }
 
+    #[deprecated]
     pub fn forward_prefilled(&mut self, loss: &mut Option<T>) -> &BlobVec<T> {
         self.forward(loss)
     }
@@ -393,39 +400,92 @@ impl<T: BlobType> Net<T> {
     }
 
     pub fn forward_from(&mut self, start: usize) -> T {
-        //
+        self.forward_from_to(start, self.layers.len() - 1usize)
     }
 
     pub fn forward_to(&mut self, end: usize) -> T {
-        //
+        self.forward_from_to(0, end)
     }
 
+    #[deprecated]
     pub fn forward_with_input(&mut self, bottom: &BlobVec<T>, loss: &mut Option<T>) -> &BlobVec<T> {
-        //
+        // Copy bottom to net bottoms
+        for i in 0..bottom.len() {
+            self.net_input_blobs[i].borrow_mut().copy_from(&*bottom[i].as_ref().borrow(), false, false);
+        }
+
+        self.forward(loss)
     }
 
     pub fn clear_param_diffs(&mut self) {
-        //
+        for param in &self.learnable_params {
+            let mut blob = param.borrow_mut();
+            match Caffe::mode() {
+                CaffeBrew::CPU => {
+                    CaffeUtil::caffe_set(blob.count(), T::default(), blob.mutable_cpu_diff());
+                }
+                CaffeBrew::GPU => {
+                    unimplemented!();
+                }
+            }
+        }
     }
 
     pub fn backward(&mut self) {
-        //
+        self.backward_from_to(self.layers.len() - 1usize, 0);
+        if self.debug_info {
+            let mut asum_data = T::default();
+            let mut asum_diff = T::default();
+            let mut sumsq_data = T::default();
+            let mut sumsq_diff = T::default();
+            for param in &self.learnable_params {
+                let blob = param.as_ref().borrow();
+                asum_data += blob.asum_data();
+                asum_diff += blob.asum_diff();
+                sumsq_data += blob.sumsq_data();
+                sumsq_diff += blob.sumsq_diff();
+            }
+
+            let l2norm_data = T::sqrt(sumsq_data);
+            let l2norm_diff = T::sqrt(sumsq_diff);
+            error!("    [Backward] All net params (data, diff): L1 norm = ({:?}, {:?}); L2 norm = ({:?}, {:?})",
+                asum_data, asum_diff, l2norm_data, l2norm_diff);
+        }
     }
 
     pub fn backward_from_to(&mut self, start: usize, end: usize) {
-        //
+        check_ge!(end, 0);
+        check_lt!(start, self.layers.len());
+
+        for i in (end..=start).rev() {
+            for c in self.before_backward.iter_mut() {
+                c.run(i);
+            }
+            if self.layer_need_backward[i] {
+                self.layers[i].borrow_mut().backward(&self.top_vecs[i], &self.bottom_need_backward[i],
+                                                     &self.bottom_vecs[i]);
+                if self.debug_info {
+                    self.backward_debug_info(i);
+                }
+            }
+            for c in self.after_backward.iter_mut() {
+                c.run(i);
+            }
+        }
     }
 
     pub fn backward_from(&mut self, start: usize) {
-        //
+        self.backward_from_to(start, 0);
     }
 
     pub fn backward_to(&mut self, end: usize) {
-        //
+        self.backward_from_to(self.layers.len() - 1usize, end);
     }
 
     pub fn reshape(&mut self) {
-        //
+        for i in 0..self.layers.len() {
+            self.layers[i].borrow_mut().reshape(&self.bottom_vecs[i], &self.top_vecs[i]);
+        }
     }
 
     pub fn forward_backward(&mut self) -> T {
@@ -436,28 +496,101 @@ impl<T: BlobType> Net<T> {
     }
 
     pub fn update(&mut self) {
-        //
+        for param in &self.learnable_params {
+            param.borrow_mut().update();
+        }
     }
 
     // todo: private usage.
     pub fn share_weights(&mut self) {
-        //
+        for i in 0..self.params.len() {
+            let idx = self.param_owners[i];
+            if idx < 0 {
+                continue;
+            }
+
+            let mut param = self.params[i].borrow_mut();
+            let owner_param = self.params[idx as usize].as_ref().borrow();
+            param.share_data(&*owner_param);
+            param.share_diff(&*owner_param);
+        }
     }
 
     pub fn share_trained_layers_with(&mut self, other: &Net<T>) {
-        //
+        let num_source_layers = other.layers.len();
+        for i in 0..num_source_layers {
+            let source_layer_name = other.layer_names[i].as_str();
+            let target_layer_id = self.layer_names.iter().position(|x| x == source_layer_name);
+            if target_layer_id.is_none() {
+                info!("Ignoring source layer {:?}", source_layer_name);
+                continue;
+            }
+
+            info!("Copying source layer {:?}", source_layer_name);
+            let target_layer_id = target_layer_id.unwrap();
+            let source_blobs = other.layers[i].as_ref().borrow();
+            let source_blobs = source_blobs.blobs();
+            let target_blobs = self.layers[target_layer_id].as_ref().borrow();
+            let target_blobs = target_blobs.blobs();
+            check_eq!(target_blobs.len(), source_blobs.len(),
+                "Incompatible number of blobs for layer {:?}", source_layer_name);
+            for j in 0..target_blobs.len() {
+                let source_blob = source_blobs[j].as_ref().borrow();
+                {
+                    let target_blob = target_blobs[j].as_ref().borrow();
+                    assert_eq!(target_blob.shape(), source_blob.shape(),
+                               "Cannot share param {:?} weights from layer '{:?}'; shape mismatch. Source param shape is \
+                                {:?}; target param shape is {:?}",
+                               j, source_layer_name, source_blob.shape_string(), target_blob.shape_string());
+                }
+
+                target_blobs[j].borrow_mut().share_data(&*source_blob);
+            }
+        }
     }
 
     pub fn copy_trained_layers_from(&mut self, param: &NetParameter) {
-        //
+        for source_layer in param.get_layer() {
+            let source_layer_name = source_layer.get_name();
+            let target_layer_id = self.layer_names.iter().position(|x| x == source_layer_name);
+            if target_layer_id.is_none() {
+                info!("Ignoring source layer {:?}", source_layer_name);
+                continue;
+            }
+
+            info!("Copying source layer {:?}", source_layer_name);
+            let target_layer_id = target_layer_id.unwrap();
+            let source_blobs = source_layer.get_blobs();
+            let target_blobs = self.layers[target_layer_id].as_ref().borrow();
+            let target_blobs = target_blobs.blobs();
+            check_eq!(target_blobs.len(), source_blobs.len(),
+                "Incompatible number of blobs for layer {:?}", source_layer_name);
+            for j in 0..target_blobs.len() {
+                if !target_blobs[j].as_ref().borrow().shape_equals(&source_blobs[j]) {
+                    let mut source_blob = Blob::<T>::new();
+                    source_blob.set_from_proto(&source_blobs[j], true);
+                    assert!(false, "Cannot copy param {:?} weights from layer '{:?}'; shape mismatch. Source \
+                        param shape is {:?}; target param shape is {:?}. To learn this layer's parameters from \
+                        scratch rather than copying from a saved net, rename the layer.",
+                        j, source_layer_name, source_blob.shape_string(),
+                        target_blobs[j].as_ref().borrow().shape_string());
+                }
+
+                target_blobs[j].borrow_mut().set_from_proto(&source_blobs[j], false);
+            }
+        }
     }
 
     pub fn copy_trained_layers_from_file(&mut self, trained_filename: &str) {
-        //
+        // todo: is hdf5 file
+        self.copy_trained_layers_from_binary_proto(trained_filename);
     }
 
     pub fn copy_trained_layers_from_binary_proto(&mut self, trained_filename: &str) {
-        //
+        // todo ReadNetParamsFromBinaryFileOrDie
+        let mut param = NetParameter::new();
+
+        self.copy_trained_layers_from(&param);
     }
 
     pub fn copy_trained_layers_from_hdf5(&mut self, _trained_filename: &str) {
@@ -465,7 +598,13 @@ impl<T: BlobType> Net<T> {
     }
 
     pub fn to_proto(&self, param: &mut NetParameter, write_diff: bool) {
-        //
+        param.clear();
+        param.set_name(Chars::from(self.name.as_str()));
+        // Add bottom and top
+        info!("Serializing {:?} layers", self.layers.len());
+        for layer in &self.layers {
+            layer.as_ref().borrow().to_proto(param.mut_layer().push_default(), write_diff);
+        }
     }
 
     pub fn to_hdf5(&self, _filename: &str, _write_diff: bool) {
@@ -633,20 +772,29 @@ impl<T: BlobType> Net<T> {
         &self.net_output_blob_indices
     }
 
+    #[inline]
     pub fn has_blob(&self, blob_name: &str) -> bool {
-        //
+        self.blob_names_index.contains_key(blob_name)
     }
 
-    pub fn blob_by_name(&self, blob_name: &str) -> SharedBlob<T> {
-        //
+    pub fn blob_by_name(&self, blob_name: &str) -> Option<SharedBlob<T>> {
+        let idx = self.blob_names_index.get(blob_name);
+        idx.map_or_else(|| {
+            warn!("Unknown blob name {:?}", blob_name);
+            Option::None
+        }, |&i| Some(self.blobs[i].clone()))
     }
 
+    #[inline]
     pub fn has_layer(&self, layer_name: &str) -> bool {
-        //
+        self.layer_names_index.contains_key(layer_name)
     }
 
-    pub fn layer_by_name(&self, layer_name: &str) -> SharedLayer<T> {
-        //
+    pub fn layer_by_name(&self, layer_name: &str) -> Option<SharedLayer<T>> {
+        self.layer_names_index.get(layer_name).map_or_else(|| {
+            warn!("Unknown layer name {:?}", layer_name);
+            Option::None
+        }, |&i| Some(self.layers[i].clone()))
     }
 
     #[inline]
@@ -813,7 +961,7 @@ impl<T: BlobType> Net<T> {
         // Check if we are doing in-place computation
         if blob_name_to_idx.is_some() &&
             layer_param.get_bottom().len() > top_id &&
-            blob_name == layer_param.get_bottom()[top_id] {
+            blob_name == &*layer_param.get_bottom()[top_id] {
             let blob_name_to_idx = blob_name_to_idx.as_ref().unwrap();
             // In-place computation
             if Caffe::root_solver() {
@@ -836,14 +984,14 @@ impl<T: BlobType> Net<T> {
             self.blobs.push(blob_pointer.clone());
             self.blob_names.push(blob_name.to_string());
             self.blob_need_backward.push(false);
-            if let &Some(ref mut blob_name_to_idx) = blob_name_to_idx {
+            if let &mut Some(ref mut blob_name_to_idx) = blob_name_to_idx {
                 blob_name_to_idx.insert(blob_name.to_string(), blob_id);
             }
             self.top_id_vecs[layer_id].push(blob_id);
             self.top_vecs[layer_id].push(blob_pointer);
         }
 
-        if let &Some(ref mut available_blobs) = available_blobs {
+        if let &mut Some(ref mut available_blobs) = available_blobs {
             available_blobs.insert(blob_name.to_string());
         }
     }
@@ -853,7 +1001,7 @@ impl<T: BlobType> Net<T> {
                      available_blobs: &mut HashSet<String>,
                      blob_name_to_idx: &mut HashMap<String, usize>) -> usize {
         let layer_param = &param.get_layer()[layer_id];
-        let blob_name = layer_param.get_bottom()[bottom_id].as_ref();
+        let blob_name: &str = layer_param.get_bottom()[bottom_id].as_ref();
         if !available_blobs.contains(blob_name) {
             assert!(false, "Unknown bottom blob '{:?}' (layer '{:?}', bottom index {:?})",
                     blob_name, layer_param.get_name(), bottom_id);
@@ -972,17 +1120,86 @@ impl<T: BlobType> Net<T> {
     }
 
     /// Helper for displaying debug info in `forward`.
-    fn forward_debug_info(&mut self, layer_id: usize) {
-        //
+    fn forward_debug_info(&self, layer_id: usize) {
+        for top_id in 0..self.top_vecs[layer_id].len() {
+            let blob = self.top_vecs[layer_id][top_id].as_ref().borrow();
+            let blob_name = self.blob_names[self.top_id_vecs[layer_id][top_id]].as_str();
+            let data_abs_val_mean = blob.asum_data() / T::from_usize(blob.count());
+            let data_abs_val_mean = T::from_div(data_abs_val_mean);
+            if Caffe::root_solver() {
+                info!("    [Forward] Layer {:?}, top blob {:?} data: {:?}",
+                    self.layer_names[layer_id], blob_name, data_abs_val_mean);
+            }
+        }
+        for param_id in 0..self.layers[layer_id].as_ref().borrow().blobs().len() {
+            let layer = self.layers[layer_id].as_ref().borrow();
+            let blob = layer.blobs()[param_id].as_ref().borrow();
+            let net_param_id = self.param_id_vecs[layer_id][param_id];
+            let blob_name = self.param_display_names[net_param_id].as_str();
+            let data_abs_val_mean = blob.asum_data() / T::from_usize(blob.count());
+            let data_abs_val_mean = T::from_div(data_abs_val_mean);
+            if Caffe::root_solver() {
+                info!("    [Forward] Layer {:?}, param blob {:?} data: {:?}",
+                    self.layer_names[layer_id], blob_name, data_abs_val_mean);
+            }
+        }
     }
 
     /// Helper for displaying debug info in `backward`.
-    fn backward_debug_info(&mut self, layer_id: usize) {
-        //
+    fn backward_debug_info(&self, layer_id: usize) {
+        let bottom_vec = &self.bottom_vecs[layer_id];
+        for bottom_id in 0..bottom_vec.len() {
+            if !self.bottom_need_backward[layer_id][bottom_id] {
+                continue;
+            }
+
+            let blob = bottom_vec[bottom_id].as_ref().borrow();
+            let blob_name = self.blob_names[self.bottom_id_vecs[layer_id][bottom_id]].as_str();
+            let diff_abs_val_mean = blob.asum_diff() / T::from_usize(blob.count());
+            let diff_abs_val_mean = T::from_div(diff_abs_val_mean);
+            if Caffe::root_solver() {
+                info!("    [Backward] Layer {:?}, bottom blob {:?} diff: {:?}",
+                    self.layer_names[layer_id], blob_name, diff_abs_val_mean);
+            }
+        }
+        for param_id in 0..self.layers[layer_id].as_ref().borrow().blobs().len() {
+            if !self.layers[layer_id].as_ref().borrow().param_propagate_down(param_id) {
+                continue;
+            }
+
+            let layer = self.layers[layer_id].as_ref().borrow();
+            let blob = layer.blobs()[param_id].as_ref().borrow();
+            let diff_abs_val_mean = blob.asum_diff() / T::from_usize(blob.count());
+            let diff_abs_val_mean = T::from_div(diff_abs_val_mean);
+            if Caffe::root_solver() {
+                info!("    [Backward] Layer {:?}, param blob {:?} diff: {:?}",
+                    self.layer_names[layer_id], param_id, diff_abs_val_mean);
+            }
+        }
     }
 
     /// Helper for displaying debug info in `update`.
-    fn update_debug_info(&mut self, layer_id: usize) {
-        //
+    fn update_debug_info(&self, param_id: usize) {
+        let blob = self.params[param_id].as_ref().borrow();
+        let param_owner = self.param_owners[param_id];
+        let layer_name = self.layer_names[self.param_layer_indices[param_id].0].as_str();
+        let param_display_name = self.param_display_names[param_id].as_str();
+        let diff_abs_val_mean = blob.asum_diff() / T::from_usize(blob.count());
+        let diff_abs_val_mean = T::from_div(diff_abs_val_mean);
+        if param_owner < 0 {
+            let data_abs_val_mean = blob.asum_data() / T::from_usize(blob.count());
+            let data_abs_val_mean = T::from_div(data_abs_val_mean);
+            if Caffe::root_solver() {
+                info!("    [Update] Layer {:?}, param {:?} data: {:?}, diff: {:?}",
+                    layer_name, param_display_name, data_abs_val_mean, diff_abs_val_mean);
+            }
+        } else {
+            let owner_layer_name = self.layer_names[self.param_layer_indices[param_owner as usize].0].as_str();
+            let owner_display_name = self.param_display_names[param_owner as usize].as_str();
+            if Caffe::root_solver() {
+                info!("    [Update] Layer {:?}, param blob {:?} (owned by layer {:?}, param {:?}) diff: {:?}",
+                    layer_name, param_display_name, owner_layer_name, owner_display_name, diff_abs_val_mean);
+            }
+        }
     }
 }
