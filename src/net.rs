@@ -1,16 +1,18 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::option::Option::Some;
-use std::rc::Rc;
+
+use protobuf::{Chars, Clear};
 
 use crate::common::{Caffe, CaffeBrew};
 use crate::blob::{Blob, BlobOp, BlobType};
 use crate::layer::{Layer, SharedBlob, BlobVec, SharedLayer, LayerVec};
 use crate::layer_factory::{LayerRegister, LayerRegistry};
 use crate::proto::caffe::{Phase, NetParameter, NetState, NetStateRule, ParamSpec, ParamSpec_DimCheckMode};
-use crate::util::insert_splits::{insert_splits};
-use protobuf::{Chars, Clear};
-use crate::util::math_functions::CaffeUtil;
+use crate::util::{
+    insert_splits::{insert_splits},
+    math_functions::CaffeUtil,
+    upgrade_proto::{read_net_params_from_text_file_or_die, read_net_params_from_binary_file_or_die}
+};
 
 
 /// Callback invoked at specific points during at iteration.
@@ -103,7 +105,7 @@ impl<T: BlobType> Net<T> {
 
     pub fn from_file(param_file: &str, phase: Phase, level: i32, stages: &Option<Vec<String>>) -> Self {
         let mut param = NetParameter::new();
-        // todo: init param content. --> ReadNetParamsFromTextFileOrDie
+        read_net_params_from_text_file_or_die(param_file, &mut param);
 
         param.mut_state().set_phase(phase);
         if let Some(ref stages) = *stages {
@@ -377,7 +379,7 @@ impl<T: BlobType> Net<T> {
     }
 
     pub fn forward_from_to(&mut self, start: usize, end: usize) -> T {
-        check_ge!(start, 0);
+        // check_ge!(start, 0);
         check_lt!(end, self.layers.len());
 
         let mut loss = T::default();
@@ -454,7 +456,7 @@ impl<T: BlobType> Net<T> {
     }
 
     pub fn backward_from_to(&mut self, start: usize, end: usize) {
-        check_ge!(end, 0);
+        // check_ge!(end, 0);
         check_lt!(start, self.layers.len());
 
         for i in (end..=start).rev() {
@@ -589,6 +591,7 @@ impl<T: BlobType> Net<T> {
     pub fn copy_trained_layers_from_binary_proto(&mut self, trained_filename: &str) {
         // todo ReadNetParamsFromBinaryFileOrDie
         let mut param = NetParameter::new();
+        read_net_params_from_binary_file_or_die(trained_filename, &mut param);
 
         self.copy_trained_layers_from(&param);
     }
@@ -1025,7 +1028,7 @@ impl<T: BlobType> Net<T> {
     }
 
     /// Append a net parameter blob to the net.
-    fn append_param(&mut self, param: &NetParameter, layer_id: usize, param_id: usize) {
+    fn append_param(&mut self, _param: &NetParameter, layer_id: usize, param_id: usize) {
         let layer = self.layers[layer_id].as_ref().borrow();
         let layer_param = layer.layer_param();
         let param_size = layer_param.get_param().len();

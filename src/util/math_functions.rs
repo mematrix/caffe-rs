@@ -131,7 +131,7 @@ pub struct Blas<T: Sized> {
 }
 
 impl<T: Sized> BlasOp<T> for Blas<T> {
-    default fn caffe_cpu_dot(n: i32, x: &[T], y: &[T]) -> T {
+    default fn caffe_cpu_dot(_n: i32, _x: &[T], _y: &[T]) -> T {
         unimplemented!();
     }
 }
