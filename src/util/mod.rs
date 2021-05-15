@@ -1,3 +1,4 @@
+pub mod mkl_alternate;
 pub mod math_functions;
 pub mod insert_splits;
 pub mod io;

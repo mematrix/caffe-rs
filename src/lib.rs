@@ -13,6 +13,7 @@ mod blob;
 mod layer;
 mod layer_factory;
 mod net;
+mod layers;
 
 #[cfg(test)]
 mod tests {

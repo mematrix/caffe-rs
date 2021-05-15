@@ -10,7 +10,7 @@ use crate::proto::caffe::{BlobProto, BlobShape};
 
 /// A marker trait to be used in the type bound of `Blob`. It is explicitly marked as `unsafe` and
 /// only should be implemented for `f32` and `f64` currently.
-pub unsafe trait BlobType: Default + CaffeNum + std::fmt::Debug {}
+pub unsafe trait BlobType: Default + CaffeNum + std::fmt::Debug + 'static {}
 
 unsafe impl BlobType for f32 {}
 
