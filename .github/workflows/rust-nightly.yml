@@ -27,7 +27,6 @@ jobs:
         default: true
         override: true
         toolchain: nightly
-    - uses: actions/checkout@v2
     - name: Build
       uses: actions-rs/cargo@v1
       with:
