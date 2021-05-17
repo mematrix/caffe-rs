@@ -112,6 +112,7 @@ impl<T: BlobType> LayerRegistry<T> {
 }
 
 
+#[macro_export]
 macro_rules! register_layer_creator {
     ($t:ident, $creator:path) => {
         paste! {
@@ -126,6 +127,7 @@ macro_rules! register_layer_creator {
     };
 }
 
+#[macro_export]
 macro_rules! register_layer_class {
     ($t:ident) => {
         paste! {
@@ -179,7 +181,7 @@ mod test {
     }
 
     impl<T: BlobType> TestLayer<T> {
-        pub fn new(param: &LayerParameter) -> Self {
+        pub fn new(_param: &LayerParameter) -> Self {
             TestLayer {
                 phantom: PhantomData
             }

@@ -2,6 +2,7 @@
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate static_init;
+#[macro_use] extern crate paste;
 
 #[macro_use]
 mod macros;
@@ -11,6 +12,7 @@ mod common;
 mod synced_mem;
 mod blob;
 mod layer;
+#[macro_use]
 mod layer_factory;
 mod net;
 mod layers;

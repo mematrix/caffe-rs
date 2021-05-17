@@ -75,3 +75,5 @@ impl<T: BlobType> CaffeLayer<T> for AbsValLayer<T> {
         no_gpu!();
     }
 }
+
+register_layer_class!(AbsVal);
