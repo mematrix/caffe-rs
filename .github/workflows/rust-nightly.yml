@@ -1,0 +1,34 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Nightly check on ubuntu-latest
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Setup protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: actions/checkout@v2
+    - name: Install nightly rust-toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        default: true
+        override: true
+        toolchain: nightly
+    - uses: actions/checkout@v2
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
