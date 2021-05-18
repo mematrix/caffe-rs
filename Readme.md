@@ -2,7 +2,13 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-mematrix/caffe--rs-lightgrey?style=flat&logo=github&color=orange)](https://github.com/mematrix/caffe-rs) 
 [![License](https://img.shields.io/badge/license-BSD-blue.svg)](LICENSE)
-[![Rust](https://github.com/mematrix/caffe-rs/actions/workflows/rust-nightly.yml/badge.svg)](https://github.com/mematrix/caffe-rs/actions/workflows/rust-nightly.yml)
+
+[![Rust](https://github.com/mematrix/caffe-rs/actions/workflows/rust-stable-latest.yml/badge.svg)](https://github.com/mematrix/caffe-rs/actions/workflows/rust-stable-latest.yml)
+[![Rust - Nightly](https://github.com/mematrix/caffe-rs/actions/workflows/rust-nightly.yml/badge.svg)](https://github.com/mematrix/caffe-rs/actions/workflows/rust-nightly.yml)
+[![Rust - Stable Minimum](https://github.com/mematrix/caffe-rs/actions/workflows/rust-stable-min.yml/badge.svg)](https://github.com/mematrix/caffe-rs/actions/workflows/rust-stable-min.yml)
+
+## Toolchain Required
+With **no unstable** feature enabled, this project needs a toolchain version `>=1.51.0` to build.
 
 ## Build
 

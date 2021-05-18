@@ -21,3 +21,6 @@ test-env-log = "0.2"
 [build-dependencies]
 protobuf = { version = "2", features = ["with-bytes"] }
 protoc-rust = "2"
+
+[package.metadata.docs.rs]
+rustdoc-args = [ "--html-in-header", "./res/docs-header.html" ]

@@ -1,3 +1,4 @@
+use std::any::{TypeId, Any};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -9,7 +10,6 @@ use paste::paste;
 use crate::proto::caffe::LayerParameter;
 use crate::blob::BlobType;
 use crate::layer::{Layer, CaffeLayer, LayerImpl, BlobVec, SharedLayer};
-use std::any::{TypeId, Any};
 
 
 pub type LayerCreator<T> = fn(&LayerParameter) -> SharedLayer<T>;
@@ -31,6 +31,7 @@ impl<T: BlobType> CreatorRegistry<T> {
         self.registry.insert(ty.to_string(), creator);
     }
 
+    /// Get a layer using a `LayerParameter`.
     pub fn create_layer(&self, param: &LayerParameter) -> SharedLayer<T> {
         let ty = param.get_field_type();
         match self.registry.get(ty) {
@@ -111,12 +112,12 @@ macro_rules! register_layer_creator {
 macro_rules! register_layer_class {
     ($t:ident) => {
         paste! {
-            pub fn [<create_ $t:snake layer>]<T: 'static + $crate::blob::BlobType>(param: &crate::proto::caffe::LayerParameter)
+            pub fn [<create_ $t:snake _layer>]<T: 'static + $crate::blob::BlobType>(param: &crate::proto::caffe::LayerParameter)
                 -> std::rc::Rc<std::cell::RefCell<$crate::layer::Layer<T>>> {
                 std::rc::Rc::new(std::cell::RefCell::new($crate::layer::Layer::new(Box::new([<$t Layer>]::<T>::new(param)))))
             }
 
-            register_layer_creator!($t, self::[<create_ $t:snake layer>]);
+            register_layer_creator!($t, self::[<create_ $t:snake _layer>]);
         }
     };
 }
@@ -126,7 +127,7 @@ macro_rules! register_layer_class {
 mod test {
     use super::*;
 
-    fn test<T: BlobType>(p: &LayerParameter) -> Rc<RefCell<Layer<T>>> {
+    fn test<T: BlobType>(p: &LayerParameter) -> SharedLayer<T> {
         unimplemented!();
     }
 

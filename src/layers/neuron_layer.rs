@@ -6,6 +6,7 @@ use crate::proto::caffe::{LayerParameter};
 /// An interface for layers that take one blob as input ($ x $) and produce one
 /// equally-sized blob as output ($ y $), where each element of the output
 /// depends only on the corresponding input element.
+#[derive(Clone)]
 pub struct NeuronLayer<T: BlobType> {
     layer: LayerImpl<T>,
 }
