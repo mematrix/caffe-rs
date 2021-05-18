@@ -1,8 +1,9 @@
 use super::neuron_layer::NeuronLayer;
+
 use crate::blob::{BlobType, BlobMemRefMut};
 use crate::layer::{CaffeLayer, LayerImpl, BlobVec, def_layer_setup};
 use crate::proto::caffe::{LayerParameter};
-use crate::util::math_functions::{Blas, BlasOp};
+use crate::util::math_functions::CaffeNum;
 
 
 pub struct AbsValLayer<T: BlobType> {
@@ -52,7 +53,7 @@ impl<T: BlobType> CaffeLayer<T> for AbsValLayer<T> {
     fn forward_cpu(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
         let count = top[0].as_ref().borrow().count();
         let mut top_data = top[0].borrow_mut();
-        Blas::caffe_abs(count, bottom[0].as_ref().borrow().cpu_data(), top_data.mutable_cpu_data());
+        T::caffe_abs(count, bottom[0].as_ref().borrow().cpu_data(), top_data.mutable_cpu_data());
     }
 
     fn forward_gpu(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
@@ -66,8 +67,8 @@ impl<T: BlobType> CaffeLayer<T> for AbsValLayer<T> {
             let top_diff = top_diff.cpu_diff();
             let mut bottom_mut = bottom[0].borrow_mut();
             let bottom_mut = bottom_mut.mutable_cpu_mem_ref();
-            Blas::caffe_cpu_sign(count, bottom_mut.data, bottom_mut.diff);
-            Blas::caffe_mul_assign(count, bottom_mut.diff, top_diff);
+            T::caffe_cpu_sign(count, bottom_mut.data, bottom_mut.diff);
+            T::caffe_mul_assign(count, bottom_mut.diff, top_diff);
         }
     }
 

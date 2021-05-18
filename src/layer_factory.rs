@@ -9,6 +9,7 @@ use paste::paste;
 use crate::proto::caffe::LayerParameter;
 use crate::blob::BlobType;
 use crate::layer::{Layer, CaffeLayer, LayerImpl, BlobVec, SharedLayer};
+use std::any::{TypeId, Any};
 
 
 pub type LayerCreator<T> = fn(&LayerParameter) -> SharedLayer<T>;
@@ -52,62 +53,41 @@ impl<T: BlobType> CreatorRegistry<T> {
     }
 }
 
-
-#[dynamic]
-static mut REGISTRY_F32: CreatorRegistry<f32> = CreatorRegistry::new();
-
-#[dynamic]
-static mut REGISTRY_F64: CreatorRegistry<f64> = CreatorRegistry::new();
-
-pub trait LayerRegister<T: BlobType> {
-    fn add_creator(ty: &str, creator: LayerCreator<T>);
-
-    fn create_layer(param: &LayerParameter) -> SharedLayer<T>;
+fn add_creator_impl<T: BlobType>(ty: &str, creator: LayerCreator<T>) {
+    let mut lock = REGISTRY.write();
+    let registry = lock.entry(TypeId::of::<T>()).or_insert_with(|| Box::new(CreatorRegistry::<T>::new()));
+    let registry = registry.downcast_mut::<CreatorRegistry<T>>().unwrap();
+    registry.add_creator(ty, creator);
 }
+
+fn create_layer_impl<T: BlobType>(param: &LayerParameter) -> SharedLayer<T> {
+    let mut lock = REGISTRY.write();
+    let registry = lock.entry(TypeId::of::<T>()).or_insert_with(|| Box::new(CreatorRegistry::<T>::new()));
+    let registry = registry.downcast_ref::<CreatorRegistry<T>>().unwrap();
+    registry.create_layer(param)
+}
+
+#[dynamic]
+static mut REGISTRY: HashMap<TypeId, Box<dyn Any + Send + Sync>> = HashMap::new();
 
 pub struct LayerRegistry<T: BlobType> {
     phantom: PhantomData<T>,
 }
 
-impl<T: BlobType> LayerRegister<T> for LayerRegistry<T> {
-    default fn add_creator(_ty: &str, _creator: LayerCreator<T>) {
-        unimplemented!();
-    }
-
-    default fn create_layer(_param: &LayerParameter) -> SharedLayer<T> {
-        unimplemented!();
-    }
-}
-
-impl LayerRegister<f32> for LayerRegistry<f32> {
-    fn add_creator(ty: &str, creator: LayerCreator<f32>) {
-        let mut lock = REGISTRY_F32.write();
-        lock.add_creator(ty, creator);
-    }
-
-    fn create_layer(param: &LayerParameter) -> SharedLayer<f32> {
-        let lock = REGISTRY_F32.read();
-        lock.create_layer(param)
-    }
-}
-
-impl LayerRegister<f64> for LayerRegistry<f64> {
-    fn add_creator(ty: &str, creator: LayerCreator<f64>) {
-        let mut lock = REGISTRY_F64.write();
-        lock.add_creator(ty, creator);
-    }
-
-    fn create_layer(param: &LayerParameter) -> SharedLayer<f64> {
-        REGISTRY_F64.read().create_layer(param)
-    }
-}
-
 impl<T: BlobType> LayerRegistry<T> {
     pub fn new(ty: &str, creator: LayerCreator<T>) -> Self {
-        LayerRegistry::<T>::add_creator(ty, creator);
+        Self::add_creator(ty, creator);
         LayerRegistry {
             phantom: PhantomData
         }
+    }
+
+    pub fn add_creator(ty: &str, creator: LayerCreator<T>) {
+        add_creator_impl(ty, creator);
+    }
+
+    pub fn create_layer(param: &LayerParameter) -> SharedLayer<T> {
+        create_layer_impl(param)
     }
 }
 

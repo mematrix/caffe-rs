@@ -1,13 +1,13 @@
-use std::rc::Rc;
 use std::boxed::Box;
 use std::cell::{RefCell, Ref, RefMut};
+use std::rc::Rc;
 
 use protobuf::Clear;
 
 use crate::common::{Caffe, CaffeBrew};
-use crate::blob::{Blob, BlobType, BlobMemRef, BlobOp};
+use crate::blob::{Blob, BlobType, BlobMemRef};
 use crate::proto::caffe;
-use crate::util::math_functions::{CaffeUtil, BlasOp, Blas};
+use crate::util::math_functions::{CaffeNum, caffe_set};
 
 
 /// A typedef for **shared_ptr** of `Blob<T>`.
@@ -241,7 +241,7 @@ impl<T: BlobType> Layer<T> {
                     let blob = RefCell::borrow(top[top_id].as_ref());
                     let count = blob.count();
                     let BlobMemRef { data, diff } = blob.cpu_mem_ref();
-                    loss += Blas::<T>::caffe_cpu_dot(count as i32, data, diff);
+                    loss += T::caffe_cpu_dot(count as i32, data, diff);
                 }
             }
             CaffeBrew::GPU => {
@@ -376,7 +376,7 @@ impl<T: BlobType> Layer<T> {
             let mut blob = top[top_id].borrow_mut();
             let count = blob.count();
             let loss_multiplier = blob.mutable_cpu_diff();
-            CaffeUtil::caffe_set(count, T::from_f32(loss_weight), loss_multiplier);
+            caffe_set(count, T::from_f32(loss_weight), loss_multiplier);
         }
     }
 }

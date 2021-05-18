@@ -1,7 +1,5 @@
 use std::cell::RefCell;
 
-use static_init::dynamic;
-
 
 #[derive(Copy, Clone)]
 pub enum CaffeBrew {

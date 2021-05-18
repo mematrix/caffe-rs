@@ -1,5 +1,3 @@
-#![feature(min_specialization)]
-
 #[macro_use] extern crate log;
 #[macro_use] extern crate static_init;
 #[macro_use] extern crate paste;

@@ -4,13 +4,13 @@ use std::collections::{HashMap, HashSet};
 use protobuf::{Chars, Clear};
 
 use crate::common::{Caffe, CaffeBrew};
-use crate::blob::{Blob, BlobOp, BlobType};
+use crate::blob::{Blob, BlobType};
 use crate::layer::{Layer, SharedBlob, BlobVec, SharedLayer, LayerVec};
-use crate::layer_factory::{LayerRegister, LayerRegistry};
+use crate::layer_factory::LayerRegistry;
 use crate::proto::caffe::{Phase, NetParameter, NetState, NetStateRule, ParamSpec, ParamSpec_DimCheckMode};
 use crate::util::{
     insert_splits::{insert_splits},
-    math_functions::CaffeUtil,
+    math_functions::caffe_set,
     upgrade_proto::{read_net_params_from_text_file_or_die, read_net_params_from_binary_file_or_die}
 };
 
@@ -424,7 +424,7 @@ impl<T: BlobType> Net<T> {
             let mut blob = param.borrow_mut();
             match Caffe::mode() {
                 CaffeBrew::CPU => {
-                    CaffeUtil::caffe_set(blob.count(), T::default(), blob.mutable_cpu_diff());
+                    caffe_set(blob.count(), T::default(), blob.mutable_cpu_diff());
                 }
                 CaffeBrew::GPU => {
                     unimplemented!();
