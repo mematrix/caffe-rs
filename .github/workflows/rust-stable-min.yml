@@ -1,0 +1,33 @@
+name: Rust - Stable Minimum
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Setup protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Install V1.51 rust-toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        default: true
+        override: true
+        toolchain: 1.51.0
+    - uses: actions/checkout@v2
+    - name: Check
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
