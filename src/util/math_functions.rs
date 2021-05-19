@@ -5,18 +5,22 @@ use cblas::{saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal};
 use super::mkl_alternate::*;
 
 
-pub trait CaffeNum: Copy + Sized + AddAssign + Div {
+pub trait CaffeNum: Copy + Sized + AddAssign + Div + PartialOrd {
     fn is_zero(&self) -> bool;
 
     fn from_f64(v: f64) -> Self;
 
     fn from_f32(v: f32) -> Self;
 
+    fn from_i32(v: i32) -> Self;
+
     fn from_usize(v: usize) -> Self;
 
     fn to_f64(self) -> f64;
 
     fn to_f32(self) -> f32;
+
+    fn to_i32(self) -> i32;
 
     fn from_div(v: <Self as Div<Self>>::Output) -> Self;
 
@@ -76,6 +80,10 @@ impl CaffeNum for i32 {
         v as i32
     }
 
+    fn from_i32(v: i32) -> Self {
+        v
+    }
+
     fn from_usize(v: usize) -> Self {
         v as i32
     }
@@ -86,6 +94,10 @@ impl CaffeNum for i32 {
 
     fn to_f32(self) -> f32 {
         self as f32
+    }
+
+    fn to_i32(self) -> i32 {
+        self
     }
 
     fn from_div(v: Self::Output) -> Self {
@@ -186,6 +198,10 @@ impl CaffeNum for f32 {
         v
     }
 
+    fn from_i32(v: i32) -> Self {
+        v as f32
+    }
+
     fn from_usize(v: usize) -> Self {
         v as f32
     }
@@ -196,6 +212,10 @@ impl CaffeNum for f32 {
 
     fn to_f32(self) -> f32 {
         self
+    }
+
+    fn to_i32(self) -> i32 {
+        self as i32
     }
 
     fn from_div(v: Self::Output) -> Self {
@@ -298,6 +318,10 @@ impl CaffeNum for f64 {
         v as f64
     }
 
+    fn from_i32(v: i32) -> Self {
+        v as f64
+    }
+
     fn from_usize(v: usize) -> Self {
         v as f64
     }
@@ -308,6 +332,10 @@ impl CaffeNum for f64 {
 
     fn to_f32(self) -> f32 {
         self as f32
+    }
+
+    fn to_i32(self) -> i32 {
+        self as i32
     }
 
     fn from_div(v: Self::Output) -> Self {

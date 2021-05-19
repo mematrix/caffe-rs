@@ -8,11 +8,11 @@ use crate::util::math_functions::CaffeNum;
 
 /// Computes $ y = |x| $.
 ///
-/// Bottom input Blob vector (length 1) -# $ (N \times C \times H \times W) $ the
-/// inputs $ x $.
+/// Bottom input Blob vector (length 1)
+/// - $ (N \times C \times H \times W) $ the inputs $ x $.
 ///
-/// Top output Blob vector (length 1) -# $ (N \times C \times H \times W) $ the
-/// computed outputs $ y = |x| $.
+/// Top output Blob vector (length 1)
+/// - $ (N \times C \times H \times W) $ the computed outputs $ y = |x| $.
 #[derive(Clone)]
 pub struct AbsValLayer<T: BlobType> {
     layer: NeuronLayer<T>,

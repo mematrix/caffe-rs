@@ -8,7 +8,7 @@
 [![Rust - Stable Minimum](https://github.com/mematrix/caffe-rs/actions/workflows/rust-stable-min.yml/badge.svg)](https://github.com/mematrix/caffe-rs/actions/workflows/rust-stable-min.yml)
 
 ## Toolchain Required
-With **no unstable** feature enabled, this project needs a toolchain version `>=1.51.0` to build.
+With **no unstable** feature enabled, this project needs a toolchain version `>=1.51.0` to be built.
 
 ## Build
 
