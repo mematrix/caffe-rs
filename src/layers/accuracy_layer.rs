@@ -21,7 +21,7 @@ pub struct AccuracyLayer<T: BlobType> {
 
 impl<T: BlobType> AccuracyLayer<T> {
     /// `param` provides **AccuracyParameter** accuracy_param, with **AccuracyLayer options**:
-    /// - top_k (**optional, default 1**). Sets the maximum rank $ k $ at which a prediction
+    /// - top_k (**optional, default `1`**). Sets the maximum rank $ k $ at which a prediction
     /// is considered correct. For example, if $ k = 5 $, a prediction is counted correct if
     /// the correct label is among the top 5 predicted labels.
     pub fn new(param: &LayerParameter) -> Self {
@@ -206,3 +206,5 @@ impl<T: BlobType> CaffeLayer<T> for AccuracyLayer<T> {
         no_gpu!();
     }
 }
+
+register_layer_class!(Accuracy);

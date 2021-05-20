@@ -8,6 +8,8 @@ use super::mkl_alternate::*;
 pub trait CaffeNum: Copy + Sized + AddAssign + Div + PartialOrd {
     fn is_zero(&self) -> bool;
 
+    fn is_nan_v(&self) -> bool;
+
     fn from_f64(v: f64) -> Self;
 
     fn from_f32(v: f32) -> Self;
@@ -70,6 +72,10 @@ pub trait CaffeNum: Copy + Sized + AddAssign + Div + PartialOrd {
 impl CaffeNum for i32 {
     fn is_zero(&self) -> bool {
         *self == 0
+    }
+
+    fn is_nan_v(&self) -> bool {
+        false
     }
 
     fn from_f64(v: f64) -> Self {
@@ -190,6 +196,10 @@ impl CaffeNum for f32 {
         *self == 0f32
     }
 
+    fn is_nan_v(&self) -> bool {
+        self.is_nan()
+    }
+
     fn from_f64(v: f64) -> Self {
         v as f32
     }
@@ -308,6 +318,10 @@ impl CaffeNum for f32 {
 impl CaffeNum for f64 {
     fn is_zero(&self) -> bool {
         *self == 0f64
+    }
+
+    fn is_nan_v(&self) -> bool {
+        self.is_nan()
     }
 
     fn from_f64(v: f64) -> Self {
