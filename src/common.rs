@@ -1,4 +1,8 @@
 use std::cell::RefCell;
+use std::rc::Rc;
+
+use mt19937::MT19937;
+use rand::{RngCore, thread_rng, SeedableRng};
 
 
 #[derive(Copy, Clone)]
@@ -7,12 +11,40 @@ pub enum CaffeBrew {
     GPU,
 }
 
+pub struct CaffeRng {
+    rng: MT19937,
+}
+
+// Random seeding. The c++ source only read '/dev/urandom' to fetch a seed.
+// Use `ThreadRng` to get a cross-platform Cryptographically Secure-PRNG
+fn cluster_seed_gen() -> u64 {
+    thread_rng().next_u64()
+}
+
+impl CaffeRng {
+    pub fn new() -> Self {
+        CaffeRng {
+            rng: MT19937::seed_from_u64(cluster_seed_gen()),
+        }
+    }
+
+    pub fn new_with_seed(seed: u64) -> Self {
+        CaffeRng {
+            rng: MT19937::seed_from_u64(seed),
+        }
+    }
+
+    pub fn generator(&mut self) -> &mut dyn RngCore {
+        &mut self.rng
+    }
+}
+
 pub struct Caffe {
-    // shared_ptr rng
     mode: CaffeBrew,
     solver_count: i32,
     solver_rank: i32,
     multiprocess: bool,
+    random_generator: Option<Rc<RefCell<CaffeRng>>>,
 }
 
 impl Caffe {
@@ -21,7 +53,8 @@ impl Caffe {
             mode: CaffeBrew::CPU,
             solver_count: 1,
             solver_rank: 0,
-            multiprocess: false
+            multiprocess: false,
+            random_generator: None,
         }
     }
 }
@@ -43,8 +76,19 @@ impl Caffe {
         });
     }
 
-    pub fn set_random_seed(seed: u32) {
-        // todo: rng
+    pub fn set_random_seed(seed: u64) {
+        // RNG seed
+        CAFFE.with(|f| {
+            f.borrow_mut().random_generator.replace(Rc::new(RefCell::new(CaffeRng::new_with_seed(seed))));
+        });
+    }
+
+    pub fn rng() -> Rc<RefCell<CaffeRng>> {
+        CAFFE.with(|f| {
+            f.borrow_mut().random_generator
+                .get_or_insert_with(|| Rc::new(RefCell::new(CaffeRng::new())))
+                .clone()
+        })
     }
 
     pub fn set_device(device_id: i32) {

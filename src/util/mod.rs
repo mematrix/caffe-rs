@@ -4,3 +4,4 @@ pub mod insert_splits;
 pub mod io;
 pub mod upgrade_proto;
 pub mod im2col;
+pub mod rng;
