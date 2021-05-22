@@ -1,11 +1,16 @@
 use std::ops::{AddAssign, Div};
 
 use cblas::{saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal};
+use float_next_after::NextAfter;
+use rand::distributions::{Uniform, Distribution, Bernoulli};
+use rand::distributions::uniform::SampleUniform;
+use rand_distr::Normal;
 
 use super::mkl_alternate::*;
+use crate::util::rng::caffe_rng;
 
 
-pub trait CaffeNum: Copy + Sized + AddAssign + Div + PartialOrd {
+pub trait CaffeNum: Copy + Sized + Default + AddAssign + Div + PartialOrd + SampleUniform {
     fn is_zero(&self) -> bool;
 
     fn is_nan_v(&self) -> bool;
@@ -27,6 +32,14 @@ pub trait CaffeNum: Copy + Sized + AddAssign + Div + PartialOrd {
     fn from_div(v: <Self as Div<Self>>::Output) -> Self;
 
     fn sqrt(v: Self) -> Self;
+
+    /// Function likes the C++ `std::nextafter`, provided the next representable value of `self`
+    /// toward the `y` direction.
+    fn next_toward(self, y: Self) -> Self;
+
+    /// Function likes the C++ `std::numeric_limits<Self>::max()`.
+    /// Returns the max value of Self Type.
+    fn num_max() -> Self;
 
     // define the functions associated with Self
 
@@ -112,6 +125,21 @@ impl CaffeNum for i32 {
 
     fn sqrt(v: Self) -> Self {
         (v as f64).sqrt() as i32
+    }
+
+    fn next_toward(self, y: Self) -> Self {
+        if self == y {
+            return self;
+        }
+        if self > y {
+            self - 1
+        } else {
+            self + 1
+        }
+    }
+
+    fn num_max() -> Self {
+        i32::MAX
     }
 
     fn caffe_axpy(n: i32, alpha: Self, x: &[Self], y: &mut [Self]) {
@@ -234,6 +262,14 @@ impl CaffeNum for f32 {
 
     fn sqrt(v: Self) -> Self {
         v.sqrt()
+    }
+
+    fn next_toward(self, y: Self) -> Self {
+        self.next_after(y)
+    }
+
+    fn num_max() -> Self {
+        f32::MAX
     }
 
     // Impls functions for Self
@@ -360,6 +396,14 @@ impl CaffeNum for f64 {
         v.sqrt()
     }
 
+    fn next_toward(self, y: Self) -> Self {
+        self.next_after(y)
+    }
+
+    fn num_max() -> Self {
+        f64::MAX
+    }
+
     // Impls Self functions.
 
     fn caffe_axpy(n: i32, alpha: f64, x: &[f64], y: &mut [f64]) {
@@ -451,10 +495,66 @@ pub fn caffe_copy<T: CaffeNum>(n: usize, x: &[T], y: &mut [T]) {
 pub fn caffe_set<T: CaffeNum>(n: usize, alpha: T, y: &mut [T]) {
     assert!(y.len() >= n);
     if alpha.is_zero() {
+        // SAFETY: the assert check makes sure that slice memory size is valid and `y`
+        // is allocated in the safety context that guards the memory alignment.
         unsafe { std::ptr::write_bytes(y.as_mut_ptr(), 0u8, n); }
     } else {
         for x in &mut y[0..n] {
             *x = alpha;
         }
+    }
+}
+
+pub fn caffe_next_after<T: CaffeNum>(b: T) -> T {
+    b.next_toward(T::num_max())
+}
+
+pub fn caffe_rng_uniform<T: CaffeNum>(n: usize, a: T, b: T, r: &mut [T]) {
+    assert!(a <= b);
+    assert!(n <= r.len());
+    let random_distribution = Uniform::new(a, caffe_next_after(b));
+    let rng = caffe_rng();
+    let mut rng = rng.borrow_mut();
+    for i in 0..n {
+        // SAFETY: the assert check makes sure that index `i` is between in the slice range.
+        unsafe { *r.get_unchecked_mut(i) = random_distribution.sample(rng.generator()) }
+    }
+}
+
+pub fn caffe_rng_gaussian<T: CaffeNum>(n: usize, a: T, sigma: T, r: &mut [T]) {
+    let a = a.to_f64();
+    let sigma = sigma.to_f64();
+    assert!(sigma > 0f64);
+    assert!(n <= r.len());
+    let random_distribution = Normal::new(a, sigma).unwrap();
+    let rng = caffe_rng();
+    let mut rng = rng.borrow_mut();
+    for i in 0..n {
+        // SAFETY: the assert check makes sure that index `i` is between in the slice range.
+        unsafe { *r.get_unchecked_mut(i) = T::from_f64(random_distribution.sample(rng.generator())); }
+    }
+}
+
+pub fn caffe_rng_bernoulli_i32<T: CaffeNum>(n: usize, p: T, r: &mut [i32]) {
+    let p = p.to_f64();
+    assert!(p >= 0f64 && p <= 1f64);
+    let random_distribution = Bernoulli::new(p).unwrap();
+    let rng = caffe_rng();
+    let mut rng = rng.borrow_mut();
+    for i in 0..n {
+        // SAFETY: the assert check makes sure that index `i` is between in the slice range.
+        unsafe { *r.get_unchecked_mut(i) = random_distribution.sample(rng.generator()) as i32; }
+    }
+}
+
+pub fn caffe_rng_bernoulli_u32<T: CaffeNum>(n: usize, p: T, r: &mut [u32]) {
+    let p = p.to_f64();
+    assert!(p >= 0f64 && p <= 1f64);
+    let random_distribution = Bernoulli::new(p).unwrap();
+    let rng = caffe_rng();
+    let mut rng = rng.borrow_mut();
+    for i in 0..n {
+        // SAFETY: the assert check makes sure that index `i` is between in the slice range.
+        unsafe { *r.get_unchecked_mut(i) = random_distribution.sample(rng.generator()) as u32; }
     }
 }

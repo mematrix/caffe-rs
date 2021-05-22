@@ -9,8 +9,10 @@ use crate::util::math_functions::{CaffeNum, caffe_copy};
 
 
 /// A marker trait to be used in the type bound of `Blob`. It is explicitly marked as `unsafe` and
-/// only should be implemented for `f32` and `f64` currently.
-pub unsafe trait BlobType: Default + CaffeNum + std::fmt::Debug + 'static {}
+/// only should be implemented for `f32` and `f64` currently (impl for `i32` partially).
+pub unsafe trait BlobType: CaffeNum + std::fmt::Debug + 'static {}
+
+unsafe impl BlobType for i32 {}
 
 unsafe impl BlobType for f32 {}
 

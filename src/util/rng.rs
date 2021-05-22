@@ -11,6 +11,10 @@ pub fn caffe_rng() -> Rc<RefCell<CaffeRng>> {
     Caffe::rng()
 }
 
+pub fn caffe_rng_rand() -> u32 {
+    Caffe::rng_rand()
+}
+
 pub fn shuffle<T>(slice: &mut [T], gen: &mut dyn RngCore) {
     if slice.len() < 1 {
         return;

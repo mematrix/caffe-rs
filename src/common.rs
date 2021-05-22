@@ -91,6 +91,15 @@ impl Caffe {
         })
     }
 
+    pub fn rng_rand() -> u32 {
+        CAFFE.with(|f| {
+            f.borrow_mut().random_generator
+                .get_or_insert_with(|| Rc::new(RefCell::new(CaffeRng::new())))
+                .as_ref().borrow_mut()
+                .rng.next_u32()
+        })
+    }
+
     pub fn set_device(device_id: i32) {
         // todo: gpu
         unimplemented!();
