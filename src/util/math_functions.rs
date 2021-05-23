@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, Div};
+use std::ops::{AddAssign, Div, MulAssign, DivAssign, SubAssign};
 
 use cblas::{saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal};
 use float_next_after::NextAfter;
@@ -10,7 +10,10 @@ use super::mkl_alternate::*;
 use crate::util::rng::caffe_rng;
 
 
-pub trait CaffeNum: Copy + Sized + Default + AddAssign + Div + PartialOrd + SampleUniform {
+pub trait CaffeNum:
+    Copy + Sized + Default +
+    AddAssign + SubAssign + MulAssign + DivAssign +
+    Div + PartialOrd + SampleUniform {
     fn is_zero(&self) -> bool;
 
     fn is_nan_v(&self) -> bool;
@@ -32,6 +35,8 @@ pub trait CaffeNum: Copy + Sized + Default + AddAssign + Div + PartialOrd + Samp
     fn from_div(v: <Self as Div<Self>>::Output) -> Self;
 
     fn sqrt(v: Self) -> Self;
+
+    fn fabs(v: Self) -> Self;
 
     /// Function likes the C++ `std::nextafter`, provided the next representable value of `self`
     /// toward the `y` direction.
@@ -125,6 +130,10 @@ impl CaffeNum for i32 {
 
     fn sqrt(v: Self) -> Self {
         (v as f64).sqrt() as i32
+    }
+
+    fn fabs(v: Self) -> Self {
+        v.abs()
     }
 
     fn next_toward(self, y: Self) -> Self {
@@ -264,6 +273,10 @@ impl CaffeNum for f32 {
         v.sqrt()
     }
 
+    fn fabs(v: Self) -> Self {
+        v.abs()
+    }
+
     fn next_toward(self, y: Self) -> Self {
         self.next_after(y)
     }
@@ -394,6 +407,10 @@ impl CaffeNum for f64 {
 
     fn sqrt(v: Self) -> Self {
         v.sqrt()
+    }
+
+    fn fabs(v: Self) -> Self {
+        v.abs()
     }
 
     fn next_toward(self, y: Self) -> Self {

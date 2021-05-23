@@ -9,6 +9,8 @@ mod util;
 mod common;
 mod synced_mem;
 mod blob;
+mod filler;
+
 mod layer;
 #[macro_use]
 mod layer_factory;

@@ -77,3 +77,12 @@ macro_rules! check_ge {
         impl_op_check!(>=, $left, $right);
     };
 }
+
+macro_rules! check_gt {
+    ($left:expr, $right:expr, $($e:expr),*) => {
+        impl_op_check!(>, $left, $right, $($e),*);
+    };
+    ($left:expr, $right:expr) => {
+        impl_op_check!(>, $left, $right);
+    };
+}
