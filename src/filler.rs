@@ -9,7 +9,7 @@ use crate::util::math_functions::{caffe_rng_uniform, caffe_rng_gaussian, caffe_r
 
 /// Fills a Blob with constant or randomly-generated data.
 pub trait Filler<T: BlobType> {
-    fn fill(&mut self, blob: &mut Blob<T>);
+    fn fill(&self, blob: &mut Blob<T>);
 }
 
 
@@ -27,7 +27,7 @@ impl ConstantFiller {
 }
 
 impl<T: BlobType> Filler<T> for ConstantFiller {
-    fn fill(&mut self, blob: &mut Blob<T>) {
+    fn fill(&self, blob: &mut Blob<T>) {
         let count = blob.count();
         let data = blob.mutable_cpu_data();
         let value = self.filler_param.get_value();
@@ -54,7 +54,7 @@ impl UniformFiller {
 }
 
 impl<T: BlobType> Filler<T> for UniformFiller {
-    fn fill(&mut self, blob: &mut Blob<T>) {
+    fn fill(&self, blob: &mut Blob<T>) {
         let count = blob.count();
         assert_ne!(count, 0);
         caffe_rng_uniform(count, T::from_f32(self.filler_param.get_min()),
@@ -78,7 +78,7 @@ impl GaussianFiller {
 }
 
 impl<T: BlobType> Filler<T> for GaussianFiller {
-    fn fill(&mut self, blob: &mut Blob<T>) {
+    fn fill(&self, blob: &mut Blob<T>) {
         let count = blob.count();
         assert_ne!(count, 0);
         caffe_rng_gaussian(count, T::from_f32(self.filler_param.get_mean()),
@@ -120,7 +120,7 @@ impl PositiveUnitballFiller {
 }
 
 impl<T: BlobType> Filler<T> for PositiveUnitballFiller {
-    fn fill(&mut self, blob: &mut Blob<T>) {
+    fn fill(&self, blob: &mut Blob<T>) {
         let count = blob.count();
         assert_ne!(count, 0);
         caffe_rng_uniform(count, T::from_i32(0), T::from_i32(1), blob.mutable_cpu_data());
@@ -171,7 +171,7 @@ impl XavierFiller {
 }
 
 impl<T: BlobType> Filler<T> for XavierFiller {
-    fn fill(&mut self, blob: &mut Blob<T>) {
+    fn fill(&self, blob: &mut Blob<T>) {
         let count = blob.count();
         assert_ne!(count, 0);
         let n = get_fan(&self.filler_param, blob);
@@ -225,7 +225,7 @@ impl MSRAFiller {
 }
 
 impl<T: BlobType> Filler<T> for MSRAFiller {
-    fn fill(&mut self, blob: &mut Blob<T>) {
+    fn fill(&self, blob: &mut Blob<T>) {
         let count = blob.count();
         assert_ne!(count, 0);
         let n = get_fan(&self.filler_param, blob);
@@ -238,6 +238,42 @@ impl<T: BlobType> Filler<T> for MSRAFiller {
 }
 
 
+/// Fills a Blob with coefficients for bilinear interpolation.
+///
+/// A common use case is with the DeconvolutionLayer acting as upsampling. You can upsample
+/// a feature map with shape of (B, C, H, W) by any integer factor using the following proto.
+///
+/// ``` proto
+/// layer {
+///   name: "upsample"
+///   type: "Deconvolution"
+///   bottom: "{{bottom_name}}"
+///   top: "{{top_name}}"
+///   convolution_param {
+///     kernel_size: {{2 * factor - factor % 2}}
+///     stride: {{factor}}
+///     num_output: {{C}}
+///     group: {{C}}
+///     pad: {{ceil((factor - 1) / 2.)}}
+///     weight_filler: { type: "bilinear" }
+///     bias_term: false
+///   }
+///   param { lr_mult: 0 decay_mult: 0 }
+/// }
+/// ```
+///
+/// Please use this by replacing `{{}}` with your values. By specifying
+/// `num_output: {{C}} group: {{C}}`, it behaves as channel-wise convolution. The filter
+/// shape of this deconvolution layer will be (C, 1, K, K) where K is `kernel_size`, and
+/// this filler will set a (K, K) interpolation kernel for every channel of the filter
+/// identically. The resulting shape of the top feature map will be (B, C, factor * H, factor * W).
+/// Note that the learning rate and the weight decay are set to 0 in order to keep coefficient
+/// values of bilinear interpolation unchanged during training. If you apply this to an image,
+/// this operation is equivalent to the following call in Python with `Scikit.Image`.
+///
+/// ``` python
+/// out = skimage.transform.rescale(img, factor, mode='constant', cval=0)
+/// ```
 pub struct BilinearFiller {
     filler_layer: FillerParameter,
 }
@@ -251,7 +287,7 @@ impl BilinearFiller {
 }
 
 impl<T: BlobType> Filler<T> for BilinearFiller {
-    fn fill(&mut self, blob: &mut Blob<T>) {
+    fn fill(&self, blob: &mut Blob<T>) {
         assert_eq!(blob.num_axes(), 4, "Blob must be 4 dim.");
         let width = blob.width() as usize;
         let height = blob.height() as usize;
@@ -278,5 +314,21 @@ impl<T: BlobType> Filler<T> for BilinearFiller {
         }
 
         assert_eq!(self.filler_layer.get_sparse(), -1, "Sparsity not supported by this Filler.");
+    }
+}
+
+
+/// Get a specific filler from the specification given in FillerParameter.
+pub fn get_filler<T: BlobType>(param: &FillerParameter) -> Box<dyn Filler<T>> {
+    let ty = param.get_field_type();
+    match ty {
+        "constant" => Box::new(ConstantFiller::new(param)),
+        "gaussian" => Box::new(GaussianFiller::new(param)),
+        "positive_unitball" => Box::new(PositiveUnitballFiller::new(param)),
+        "uniform" => Box::new(UniformFiller::new(param)),
+        "xavier" => Box::new(XavierFiller::new(param)),
+        "msra" => Box::new(MSRAFiller::new(param)),
+        "bilinear" => Box::new(BilinearFiller::new(param)),
+        _ => panic!("Unknown filler name: {:?}", ty),
     }
 }

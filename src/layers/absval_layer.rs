@@ -13,7 +13,6 @@ use crate::util::math_functions::CaffeNum;
 ///
 /// Top output Blob vector (length 1)
 /// - $ (N \times C \times H \times W) $ the computed outputs $ y = |x| $.
-#[derive(Clone)]
 pub struct AbsValLayer<T: BlobType> {
     layer: NeuronLayer<T>,
 }

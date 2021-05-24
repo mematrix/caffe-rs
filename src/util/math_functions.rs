@@ -1,6 +1,6 @@
 use std::ops::{AddAssign, Div, MulAssign, DivAssign, SubAssign};
 
-use cblas::{saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal};
+use cblas::{Transpose, Layout, saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal, sgemm, sgemv, dgemm, dgemv};
 use float_next_after::NextAfter;
 use rand::distributions::{Uniform, Distribution, Bernoulli};
 use rand::distributions::uniform::SampleUniform;
@@ -85,6 +85,12 @@ pub trait CaffeNum:
     fn caffe_cpu_sgnbit(n: usize, x: &[Self], y: &mut [Self]);
 
     fn caffe_cpu_fabs(n: usize, x: &[Self], y: &mut [Self]);
+
+    fn caffe_cpu_gemm(trans_a: Transpose, trans_b: Transpose, m: i32, n: i32, k: i32,
+                      alpha: Self, a: &[Self], b: &[Self], beta: Self, c: &mut [Self]);
+
+    fn caffe_cpu_gemv(trans_a: Transpose, m: i32, n: i32, alpha: Self,
+                      a: &[Self], x: &[Self], beta: Self, y: &mut [Self]);
 }
 
 impl CaffeNum for i32 {
@@ -226,6 +232,16 @@ impl CaffeNum for i32 {
     fn caffe_cpu_fabs(n: usize, x: &[Self], y: &mut [Self]) {
         todo!()
     }
+
+    fn caffe_cpu_gemm(trans_a: Transpose, trans_b: Transpose, m: i32, n: i32, k: i32,
+                      alpha: Self, a: &[Self], b: &[Self], beta: Self, c: &mut [Self]) {
+        todo!()
+    }
+
+    fn caffe_cpu_gemv(trans_a: Transpose, m: i32, n: i32, alpha: Self,
+                      a: &[Self], x: &[Self], beta: Self, y: &mut [Self]) {
+        todo!()
+    }
 }
 
 impl CaffeNum for f32 {
@@ -362,6 +378,18 @@ impl CaffeNum for f32 {
     fn caffe_cpu_fabs(n: usize, x: &[f32], y: &mut [f32]) {
         vs_fabs(n, x, y);
     }
+
+    fn caffe_cpu_gemm(trans_a: Transpose, trans_b: Transpose, m: i32, n: i32, k: i32,
+                      alpha: Self, a: &[Self], b: &[Self], beta: Self, c: &mut [Self]) {
+        let lda = if trans_a == Transpose::None { k } else { m };
+        let ldb = if trans_b == Transpose::None { n } else { k };
+        unsafe { sgemm(Layout::RowMajor, trans_a, trans_b, m, n, k, alpha, a, lda, b, ldb, beta, c, n); }
+    }
+
+    fn caffe_cpu_gemv(trans_a: Transpose, m: i32, n: i32, alpha: Self,
+                      a: &[Self], x: &[Self], beta: Self, y: &mut [Self]) {
+        unsafe { sgemv(Layout::RowMajor, trans_a, m, n, alpha, a, n, x, 1, beta, y, 1); }
+    }
 }
 
 impl CaffeNum for f64 {
@@ -497,6 +525,18 @@ impl CaffeNum for f64 {
 
     fn caffe_cpu_fabs(n: usize, x: &[f64], y: &mut [f64]) {
         vd_fabs(n, x, y);
+    }
+
+    fn caffe_cpu_gemm(trans_a: Transpose, trans_b: Transpose, m: i32, n: i32, k: i32,
+                      alpha: Self, a: &[Self], b: &[Self], beta: Self, c: &mut [Self]) {
+        let lda = if trans_a == Transpose::None { k } else { m };
+        let ldb = if trans_b == Transpose::None { n } else { k };
+        unsafe { dgemm(Layout::RowMajor, trans_a, trans_b, m, n, k, alpha, a, lda, b, ldb, beta, c, n); }
+    }
+
+    fn caffe_cpu_gemv(trans_a: Transpose, m: i32, n: i32, alpha: Self,
+                      a: &[Self], x: &[Self], beta: Self, y: &mut [Self]) {
+        unsafe { dgemv(Layout::RowMajor, trans_a, m, n, alpha, a, n, x, 1, beta, y, 1); }
     }
 }
 
