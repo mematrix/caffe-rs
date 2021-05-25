@@ -18,7 +18,11 @@ impl<T> MemPtr<T> {
         }
     }
 
-    pub fn raw_parts(&self) -> (*mut T, usize) {
+    pub fn raw_parts(&self) -> (*const T, usize) {
+        (self.ptr as *const T, self.count)
+    }
+
+    pub fn raw_parts_mut(&mut self) -> (*mut T, usize) {
         (self.ptr, self.count)
     }
 
@@ -42,7 +46,18 @@ impl<T> Drop for MemPtr<T> {
 
 #[derive(Clone)]
 pub struct MemShared<T> {
-    mem: Rc<RefCell<MemPtr<T>>>
+    mem: Rc<RefCell<MemPtr<T>>>,
+    offset: isize,
+}
+
+impl<T> MemShared<T> {
+    /// Make a new instance which pointer is offset by a length `offset * std::mem::size_of::<T>()`.
+    pub fn offset(&self, offset: i32) -> Self {
+        MemShared {
+            mem: self.mem.clone(),
+            offset: self.offset + offset as isize,
+        }
+    }
 }
 
 
@@ -50,6 +65,7 @@ pub struct MemShared<T> {
 pub struct SyncedMemory<T: Sized> {
     cpu_mem: Option<Rc<RefCell<MemPtr<T>>>>,
     count: usize,
+    cpu_offset: isize,
 }
 
 impl<T: Sized> Default for SyncedMemory<T> {
@@ -57,6 +73,7 @@ impl<T: Sized> Default for SyncedMemory<T> {
         SyncedMemory {
             cpu_mem: Default::default(),
             count: 0,
+            cpu_offset: 0,
         }
     }
 }
@@ -72,6 +89,7 @@ impl<T: Sized> SyncedMemory<T> {
         SyncedMemory {
             cpu_mem: Default::default(),
             count,
+            cpu_offset: 0
         }
     }
 
@@ -92,35 +110,49 @@ impl<T: Sized> SyncedMemory<T> {
         }
     }
 
-    pub fn cpu_data(&mut self) -> Ref<MemPtr<T>> {
-        // note: let caller call this method manually.
+    pub fn cpu_data(&mut self) -> &[T] {
         self.sync_to_cpu();
-        RefCell::borrow(self.cpu_mem.as_ref().unwrap())
+        let (ptr, _) = RefCell::borrow(self.cpu_mem.as_ref().unwrap()).raw_parts();
+        unsafe { std::slice::from_raw_parts(ptr.offset(self.cpu_offset), self.count) }
+    }
+
+    pub fn cpu_data_raw(&mut self) -> (*const T, usize) {
+        self.sync_to_cpu();
+        let (ptr, _) = self.cpu_mem.as_ref().unwrap().as_ref().borrow().raw_parts();
+        (unsafe { ptr.offset(self.cpu_offset) }, self.count)
     }
 
     pub fn cpu_data_shared(&mut self) -> MemShared<T> {
         self.sync_to_cpu();
         MemShared {
-            mem: Rc::clone(self.cpu_mem.as_ref().unwrap())
+            mem: Rc::clone(self.cpu_mem.as_ref().unwrap()),
+            offset: self.cpu_offset,
         }
     }
 
     pub fn try_map_cpu_data<F, U>(&self, f: F) -> Option<U> where F: FnOnce(&[T]) -> U {
         self.cpu_mem.as_ref().map(|ptr| {
-            let data = RefCell::borrow((*ptr).as_ref());
-            f(data.as_slice())
+            let (ptr, _) = RefCell::borrow((*ptr).as_ref()).raw_parts();
+            f(unsafe { std::slice::from_raw_parts(ptr.offset(self.cpu_offset), self.count) })
         })
     }
 
-    pub fn mutable_cpu_data(&mut self) -> RefMut<MemPtr<T>> {
+    pub fn mutable_cpu_data(&mut self) -> &mut [T] {
         self.sync_to_cpu();
-        RefCell::borrow_mut(self.cpu_mem.as_ref().unwrap())
+        let (ptr, _) = RefCell::borrow_mut(self.cpu_mem.as_ref().unwrap()).raw_parts_mut();
+        unsafe { std::slice::from_raw_parts_mut(ptr.offset(self.cpu_offset), self.count) }
+    }
+
+    pub fn mutable_cpu_data_raw(&mut self) -> (*mut T, usize) {
+        self.sync_to_cpu();
+        let (ptr, _) = self.cpu_mem.as_ref().unwrap().borrow_mut().raw_parts_mut();
+        (unsafe { ptr.offset(self.cpu_offset) }, self.count)
     }
 
     pub fn try_map_cpu_mut_data<F, U>(&mut self, f: F) -> Option<U> where F: FnOnce(&mut [T]) -> U {
         self.cpu_mem.as_ref().map(|ptr| {
-            let mut data = RefCell::borrow_mut((*ptr).as_ref());
-            f(data.as_mut_slice())
+            let (ptr, _) = RefCell::borrow_mut((*ptr).as_ref()).raw_parts_mut();
+            f(unsafe { std::slice::from_raw_parts_mut(ptr.offset(self.cpu_offset), self.count) })
         })
     }
 
@@ -128,12 +160,18 @@ impl<T: Sized> SyncedMemory<T> {
         let mem_ptr = data.mem.as_ptr();
         let &MemPtr { ptr, count } = unsafe { &*mem_ptr };
 
-        trace!("Set a borrowed slice of CPU memory. ptr: {:?}, len: {} * {}", ptr, count, std::mem::size_of::<T>());
-        if self.count > count {
-            panic!("Set a slice which length ({}) less than the memory need ({}).", count, self.count);
+        trace!("Set a borrowed slice of CPU memory. ptr: {:?}, len: {} * {}; offset: {}",
+               ptr, count, std::mem::size_of::<T>(), data.offset);
+        if data.offset < 0 {
+            panic!("Set a borrowed memory but which offset({}) < 0.", data.offset);
+        }
+        if self.count + data.offset as usize > count {
+            panic!("Set a slice which length ({} - offset({}) = {}) less than the memory need ({}).",
+                   count, data.offset, count as isize - data.offset, self.count);
         }
 
         self.cpu_mem = Some(Rc::clone(&data.mem));
+        self.cpu_offset = data.offset;
     }
 }
 
@@ -149,8 +187,7 @@ fn mem_ptr_test_new() {
 #[test]
 fn synced_mem_test_uninit() {
     let mut s = SyncedMemory::new_uninit();
-    let slice = s.cpu_data();
-    let slice: &[i32] = slice.as_slice();
+    let slice: &[i32] = s.cpu_data();
     info!("New uninitialized memory, ptr: {:?}, len: {}", slice.as_ptr(), slice.len());
 }
 
@@ -159,7 +196,6 @@ fn synced_mem_test_new() {
     let mut s = SyncedMemory::new(78);
     {
         let mut slice = s.mutable_cpu_data();
-        let slice = slice.as_mut_slice();
         info!("Get mutable slice from SyncedMemory: {:#?}", slice);
         let mut count = 0u8;
         for x in slice {
@@ -169,14 +205,14 @@ fn synced_mem_test_new() {
     }
 
     let slice = s.cpu_data();
-    let slice = slice.as_slice();
     info!("Get const slice from SyncedMemory: {:#?}", slice);
 }
 
 #[test]
 fn synced_mem_test_slice() {
     let mem = MemShared {
-        mem: Rc::new(RefCell::new(MemPtr::new(12)))
+        mem: Rc::new(RefCell::new(MemPtr::new(12))),
+        offset: 2,
     };
     {
         let mut s = SyncedMemory::new(9);
@@ -184,7 +220,6 @@ fn synced_mem_test_slice() {
         s.set_cpu_data(&mem);
 
         let mut slice = s.mutable_cpu_data();
-        let slice = slice.as_mut_slice();
         info!("Get mutable slice from SyncedMemory: {:#?}", slice);
         let mut count = 2u8;
         for x in slice {

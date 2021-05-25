@@ -196,7 +196,7 @@ impl<T> Blob<T> where T: BlobType {
     }
 
     pub fn cpu_data(&self) -> &[T] {
-        let (ptr, count) = self.data.as_ref().unwrap().borrow_mut().cpu_data().raw_parts();
+        let (ptr, count) = self.data.as_ref().unwrap().borrow_mut().cpu_data_raw();
         unsafe { std::slice::from_raw_parts(ptr, count) }
     }
 
@@ -208,7 +208,7 @@ impl<T> Blob<T> where T: BlobType {
 
     pub fn cpu_diff(&self) -> &[T] {
         if let Some(ref ptr) = self.diff {
-            let (ptr, count) = (*ptr).borrow_mut().cpu_data().raw_parts();
+            let (ptr, count) = (*ptr).borrow_mut().cpu_data_raw();
             unsafe { std::slice::from_raw_parts(ptr, count) }
         } else {
             panic!("diff memory not init");
@@ -222,8 +222,8 @@ impl<T> Blob<T> where T: BlobType {
     // pub fn gpu_diff(&mut self) -> &[T] {}
 
     pub fn cpu_mem_ref(&self) -> BlobMemRef<T> {
-        let (data_ptr, data_count) = self.data.as_ref().unwrap().borrow_mut().cpu_data().raw_parts();
-        let (diff_ptr, diff_count) = self.diff.as_ref().unwrap().borrow_mut().cpu_data().raw_parts();
+        let (data_ptr, data_count) = self.data.as_ref().unwrap().borrow_mut().cpu_data_raw();
+        let (diff_ptr, diff_count) = self.diff.as_ref().unwrap().borrow_mut().cpu_data_raw();
         BlobMemRef {
             data: unsafe { std::slice::from_raw_parts(data_ptr, data_count) },
             diff: unsafe { std::slice::from_raw_parts(diff_ptr, diff_count) },
@@ -232,7 +232,7 @@ impl<T> Blob<T> where T: BlobType {
 
     pub fn mutable_cpu_data(&mut self) -> &mut [T] {
         if let Some(ref mut ptr) = self.data {
-            let (ptr, count) = (*ptr).borrow_mut().mutable_cpu_data().raw_parts();
+            let (ptr, count) = (*ptr).borrow_mut().mutable_cpu_data_raw();
             unsafe { std::slice::from_raw_parts_mut(ptr, count) }
         } else {
             panic!("data memory not init");
@@ -241,7 +241,7 @@ impl<T> Blob<T> where T: BlobType {
 
     pub fn mutable_cpu_diff(&mut self) -> &mut [T] {
         if let Some(ref mut ptr) = self.diff {
-            let (ptr, count) = (*ptr).borrow_mut().mutable_cpu_data().raw_parts();
+            let (ptr, count) = (*ptr).borrow_mut().mutable_cpu_data_raw();
             unsafe { std::slice::from_raw_parts_mut(ptr, count) }
         } else {
             panic!("diff memory not init");
@@ -249,8 +249,8 @@ impl<T> Blob<T> where T: BlobType {
     }
 
     pub fn mutable_cpu_mem_ref(&mut self) -> BlobMemRefMut<T> {
-        let (data_ptr, data_count) = self.data.as_ref().unwrap().borrow_mut().mutable_cpu_data().raw_parts();
-        let (diff_ptr, diff_count) = self.diff.as_ref().unwrap().borrow_mut().mutable_cpu_data().raw_parts();
+        let (data_ptr, data_count) = self.data.as_ref().unwrap().borrow_mut().mutable_cpu_data_raw();
+        let (diff_ptr, diff_count) = self.diff.as_ref().unwrap().borrow_mut().mutable_cpu_data_raw();
         BlobMemRefMut {
             data: unsafe { std::slice::from_raw_parts_mut(data_ptr, data_count) },
             diff: unsafe { std::slice::from_raw_parts_mut(diff_ptr, diff_count) },
