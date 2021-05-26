@@ -142,6 +142,14 @@ pub fn vd_div(n: usize, a: &[f64], b: &[f64], y: &mut [f64]) {
 
 // AssignOps impls. The operation is in the form e.g. y[i] *= a[i]
 
+pub fn vs_sub_assign(n: usize, y: &mut [f32], a: &[f32]) {
+    check_loop_unsafe!(i, n, a, y, *y.get_unchecked_mut(i) -= *a.get_unchecked(i));
+}
+
+pub fn vd_sub_assign(n: usize, y: &mut [f64], a: &[f64]) {
+    check_loop_unsafe!(i, n, a, y, *y.get_unchecked_mut(i) -= *a.get_unchecked(i));
+}
+
 pub fn vs_mul_assign(n: usize, y: &mut [f32], a: &[f32]) {
     check_loop_unsafe!(i, n, a, y, *y.get_unchecked_mut(i) *= *a.get_unchecked(i));
 }

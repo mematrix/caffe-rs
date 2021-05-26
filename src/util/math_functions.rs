@@ -62,11 +62,15 @@ pub trait CaffeNum:
 
     fn caffe_sub(n: usize, a: &[Self], b: &[Self], y: &mut [Self]);
 
+    fn caffe_sub_assign(n: usize, y: &mut [Self], a: &[Self]);
+
     fn caffe_mul(n: usize, a: &[Self], b: &[Self], y: &mut [Self]);
 
     fn caffe_mul_assign(n: usize, y: &mut [Self], a: &[Self]);
 
     fn caffe_div(n: usize, a: &[Self], b: &[Self], y: &mut [Self]);
+
+    fn caffe_add_scalar(n: usize, alpha: Self, y: &mut [Self]);
 
     fn caffe_powx(n: usize, a: &[Self], b: Self, y: &mut [Self]);
 
@@ -185,6 +189,10 @@ impl CaffeNum for i32 {
         todo!()
     }
 
+    fn caffe_sub_assign(n: usize, y: &mut [Self], a: &[Self]) {
+        todo!()
+    }
+
     fn caffe_mul(n: usize, a: &[Self], b: &[Self], y: &mut [Self]) {
         todo!()
     }
@@ -194,6 +202,10 @@ impl CaffeNum for i32 {
     }
 
     fn caffe_div(n: usize, a: &[Self], b: &[Self], y: &mut [Self]) {
+        todo!()
+    }
+
+    fn caffe_add_scalar(n: usize, alpha: Self, y: &mut [Self]) {
         todo!()
     }
 
@@ -331,6 +343,10 @@ impl CaffeNum for f32 {
         vs_sub(n, a, b, y);
     }
 
+    fn caffe_sub_assign(n: usize, y: &mut [Self], a: &[Self]) {
+        vs_sub_assign(n, y, a);
+    }
+
     fn caffe_mul(n: usize, a: &[f32], b: &[f32], y: &mut [f32]) {
         vs_mul(n, a, b, y);
     }
@@ -341,6 +357,14 @@ impl CaffeNum for f32 {
 
     fn caffe_div(n: usize, a: &[f32], b: &[f32], y: &mut [f32]) {
         vs_div(n, a, b, y);
+    }
+
+    fn caffe_add_scalar(n: usize, alpha: Self, y: &mut [Self]) {
+        assert!(y.len() >= n);
+        for i in 0..n {
+            // SAFETY: assert y.len >= n
+            unsafe { *y.get_unchecked_mut(i) += alpha; }
+        }
     }
 
     fn caffe_powx(n: usize, a: &[f32], b: f32, y: &mut [f32]) {
@@ -479,6 +503,10 @@ impl CaffeNum for f64 {
         vd_sub(n, a, b, y);
     }
 
+    fn caffe_sub_assign(n: usize, y: &mut [Self], a: &[Self]) {
+        vd_sub_assign(n, y, a);
+    }
+
     fn caffe_mul(n: usize, a: &[f64], b: &[f64], y: &mut [f64]) {
         vd_mul(n, a, b, y);
     }
@@ -489,6 +517,14 @@ impl CaffeNum for f64 {
 
     fn caffe_div(n: usize, a: &[f64], b: &[f64], y: &mut [f64]) {
         vd_div(n, a, b, y);
+    }
+
+    fn caffe_add_scalar(n: usize, alpha: f64, y: &mut [f64]) {
+        assert!(y.len() >= n);
+        for i in 0..n {
+            // SAFETY: assert y.len >= n
+            unsafe { *y.get_unchecked_mut(i) += alpha; }
+        }
     }
 
     fn caffe_powx(n: usize, a: &[f64], b: f64, y: &mut [f64]) {

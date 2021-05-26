@@ -4,7 +4,7 @@ use std::cell::{RefCell, Ref, RefMut};
 use std::rc::Rc;
 
 use crate::proto::caffe::{BlobProto, BlobShape};
-use crate::synced_mem::{SyncedMemory, MemShared, MemPtr};
+use crate::synced_mem::{SyncedMemory, MemShared};
 use crate::util::math_functions::{CaffeNum, caffe_copy};
 
 
