@@ -10,6 +10,7 @@ mod common;
 mod synced_mem;
 mod blob;
 mod filler;
+mod internal_thread;
 mod data_transformer;
 
 mod layer;
