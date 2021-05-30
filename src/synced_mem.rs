@@ -1,12 +1,16 @@
 use std::alloc::{alloc_zeroed, dealloc, Layout};
-use std::rc::Rc;
 use std::cell::{RefCell, Ref, RefMut};
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 
 struct MemPtr<T> {
     ptr: *mut T,
     count: usize,
 }
+
+/// Makes the raw memory handle be sent between threads.
+unsafe impl<T> Send for MemPtr<T> {}
 
 impl<T> MemPtr<T> {
     pub fn new(count: usize) -> Self {
@@ -172,6 +176,59 @@ impl<T: Sized> SyncedMemory<T> {
 
         self.cpu_mem = Some(Rc::clone(&data.mem));
         self.cpu_offset = data.offset;
+    }
+}
+
+
+pub struct ArcSyncedMemory<T: Sized> {
+    cpu_mem: Option<Arc<Mutex<MemPtr<T>>>>,
+    count: usize,
+    cpu_offset: isize,
+}
+
+impl<T: Sized> ArcSyncedMemory<T> {
+    pub fn new() -> Self {
+        Self {
+            cpu_mem: Default::default(),
+            count: 0,
+            cpu_offset: 0,
+        }
+    }
+
+    pub fn from(mut mem: SyncedMemory<T>) -> Result<Self, SyncedMemory<T>> {
+        let cpu_mem = mem.cpu_mem.map(|r| Rc::try_unwrap(r));
+        if cpu_mem.as_ref().map_or(false, |r| r.is_err()) {
+            mem.cpu_mem = cpu_mem.map(|r| r.err().unwrap());
+            return Result::Err(mem);
+        }
+
+        let cpu_mem = cpu_mem.map(
+            |r| Arc::new(Mutex::new(r.ok().unwrap().into_inner()))
+        );
+        let arc_mem = ArcSyncedMemory {
+            cpu_mem,
+            count: mem.count,
+            cpu_offset: mem.cpu_offset,
+        };
+        Result::Ok(arc_mem)
+    }
+
+    pub fn into_mem(mut self) -> Result<SyncedMemory<T>, Self> {
+        let cpu_mem = self.cpu_mem.map(|a| Arc::try_unwrap(a));
+        if cpu_mem.as_ref().map_or(false, |r| r.is_err()) {
+            self.cpu_mem = cpu_mem.map(|r| r.err().unwrap());
+            return Result::Err(self);
+        }
+
+        let cpu_mem = cpu_mem.map(
+            |r| Rc::new(RefCell::new(r.ok().unwrap().into_inner().unwrap()))
+        );
+        let mem = SyncedMemory {
+            cpu_mem,
+            count: self.count,
+            cpu_offset: self.cpu_offset,
+        };
+        Result::Ok(mem)
     }
 }
 

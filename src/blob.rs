@@ -2,9 +2,10 @@ use std::any::TypeId;
 use std::boxed::Box;
 use std::cell::{RefCell, Ref, RefMut};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::proto::caffe::{BlobProto, BlobShape};
-use crate::synced_mem::{SyncedMemory, MemShared};
+use crate::synced_mem::{SyncedMemory, MemShared, ArcSyncedMemory};
 use crate::util::math_functions::{CaffeNum, caffe_copy};
 
 
@@ -548,3 +549,107 @@ fn proto_write_f64_diff<T: BlobType>(proto: &mut BlobProto, diff: &[T]) {
         proto.mut_double_diff().push(i.to_f64());
     }
 }
+
+
+
+
+/// A thread-safe version of [`Blob`][Blob].
+///
+/// [Blob]: caffe_rs::blob::Blob
+#[derive(Default)]
+pub struct ArcBlob<T: BlobType> {
+    data: Option<Arc<Mutex<ArcSyncedMemory<T>>>>,
+    diff: Option<Arc<Mutex<ArcSyncedMemory<T>>>>,
+    shape: Vec<i32>,
+    count: usize,
+    capacity: usize,
+}
+
+impl<T: BlobType> ArcBlob<T> {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn from(mut blob: Blob<T>) -> Result<Self, Blob<T>> {
+        let data = blob.data.map(|d| Rc::try_unwrap(d));
+        let data = data.map(
+            |r| r.map(|rc| ArcSyncedMemory::from(rc.into_inner()))
+        );
+        let diff = blob.diff.map(|d| Rc::try_unwrap(d));
+        let diff = diff.map(
+            |r| r.map(|rc| ArcSyncedMemory::from(rc.into_inner()))
+        );
+        if data.as_ref().map_or(false, |r| r.is_err()) ||
+            diff.as_ref().map_or(false, |r| r.is_err()) {
+            blob.data = data.map(|r| r.err().unwrap());
+            blob.diff = diff.map(|r| r.err().unwrap());
+            return Result::Err(blob);
+        }
+
+        let data = data.map(|r| r.ok().unwrap());
+        let diff = diff.map(|r| r.ok().unwrap());
+        if data.as_ref().map_or(false, |r| r.is_err()) ||
+            diff.as_ref().map_or(false, |r| r.is_err()) {
+            blob.data = data.map(|r| Rc::new(RefCell::new(r.err().unwrap())));
+            blob.diff = diff.map(|r| Rc::new(RefCell::new(r.err().unwrap())));
+            return Result::Err(blob);
+        }
+
+        let data = data.map(
+            |d| Arc::new(Mutex::new(d.ok().unwrap()))
+        );
+        let diff = diff.map(
+            |d| Arc::new(Mutex::new(d.ok().unwrap()))
+        );
+        let arc_blob = ArcBlob {
+            data,
+            diff,
+            shape: blob.shape,
+            count: blob.count,
+            capacity: blob.capacity,
+        };
+        Result::Ok(arc_blob)
+    }
+
+    pub fn into_blob(mut self) -> Result<Blob<T>, ArcBlob<T>> {
+        let data = self.data.map(|a| Arc::try_unwrap(a));
+        let data = data.map(
+            |r| r.map(|m| m.into_inner().unwrap().into_mem())
+        );
+        let diff = self.diff.map(|a| Arc::try_unwrap(a));
+        let diff = diff.map(
+            |r| r.map(|m| m.into_inner().unwrap().into_mem())
+        );
+        if data.as_ref().map_or(false, |r| r.is_err()) ||
+            diff.as_ref().map_or(false, |r| r.is_err()) {
+            self.data = data.map(|r| r.err().unwrap());
+            self.diff = diff.map(|r| r.err().unwrap());
+            return Result::Err(self);
+        }
+
+        let data = data.map(|r| r.ok().unwrap());
+        let diff = diff.map(|r| r.ok().unwrap());
+        if data.as_ref().map_or(false, |r| r.is_err()) ||
+            diff.as_ref().map_or(false, |r| r.is_err()) {
+            self.data = data.map(|r| Arc::new(Mutex::new(r.err().unwrap())));
+            self.diff = diff.map(|r| Arc::new(Mutex::new(r.err().unwrap())));
+            return Result::Err(self);
+        }
+
+        let data = data.map(
+            |d| Rc::new(RefCell::new(d.ok().unwrap()))
+        );
+        let diff = diff.map(
+            |d| Rc::new(RefCell::new(d.ok().unwrap()))
+        );
+        let blob = Blob {
+            data,
+            diff,
+            shape: self.shape,
+            count: self.count,
+            capacity: self.capacity,
+        };
+        Result::Ok(blob)
+    }
+}
+
