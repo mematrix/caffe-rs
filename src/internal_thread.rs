@@ -38,22 +38,16 @@ pub trait InternalThread {
 
     fn get_thread_mut(&mut self) -> &mut InternalThreadImpl;
 
-    fn get_entry_data(&mut self) -> Self::EntryData;
+    fn get_entry_data(&mut self) -> Box<Self::EntryData>;
 
     /// Implement this method in your subclass with the code you want your thread to run.
-    fn internal_thread_entry(token: CancelToken, data: Self::EntryData) where Self: Sized;
-}
+    fn internal_thread_entry(token: CancelToken, data: Box<Self::EntryData>);
 
-pub trait InternalThreadLaunch: InternalThread {
     /// Caffe's thread local state will be initialized using the current
     /// thread values, e.g. device id, solver index etc. The random seed
     /// is initialized using caffe_rng_rand.
-    fn start_internal_thread(&mut self);
-}
-
-impl<T: Sized + InternalThread> InternalThreadLaunch for T {
     fn start_internal_thread(&mut self) {
-        assert!(self.get_thread().thread.is_none(), "Threads should persist and not be restarted.");
+        assert!(!self.is_started(), "Threads should persist and not be restarted.");
 
         let _device = 0;
         let mode = Caffe::mode();
@@ -74,18 +68,16 @@ impl<T: Sized + InternalThread> InternalThreadLaunch for T {
             Self::internal_thread_entry(token, data);
         }));
     }
-}
 
-impl<E: Send + 'static> dyn InternalThread<EntryData = E> {
     /// Will block until the internal thread has exited.
-    pub fn stop_internal_thread(&mut self) {
+    fn stop_internal_thread(&mut self) {
         let th = self.get_thread_mut();
         th.interrupt.store(true, Ordering::Relaxed);
         let handle = th.thread.take();
         handle.map(|t| t.join().unwrap());
     }
 
-    pub fn is_started(&self) -> bool {
+    fn is_started(&self) -> bool {
         self.get_thread().thread.is_some()
     }
 }
