@@ -139,7 +139,9 @@ mod test {
         phantom: PhantomData<T>,
     }
 
-    impl<T: BlobType> CaffeLayer<T> for TestLayer<T> {
+    impl<T: BlobType> CaffeLayer for TestLayer<T> {
+        type DataType = T;
+
         fn get_impl(&self) -> &LayerImpl<T> {
             todo!()
         }

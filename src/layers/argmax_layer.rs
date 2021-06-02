@@ -39,7 +39,9 @@ impl<T: BlobType> ArgMaxLayer<T> {
     }
 }
 
-impl<T: BlobType> CaffeLayer<T> for ArgMaxLayer<T> {
+impl<T: BlobType> CaffeLayer for ArgMaxLayer<T> {
+    type DataType = T;
+
     fn get_impl(&self) -> &LayerImpl<T> {
         &self.layer
     }

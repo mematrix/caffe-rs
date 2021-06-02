@@ -25,7 +25,9 @@ impl<T: BlobType> AbsValLayer<T> {
     }
 }
 
-impl<T: BlobType> CaffeLayer<T> for AbsValLayer<T> {
+impl<T: BlobType> CaffeLayer for AbsValLayer<T> {
+    type DataType = T;
+
     fn get_impl(&self) -> &LayerImpl<T> {
         self.layer.get_impl()
     }

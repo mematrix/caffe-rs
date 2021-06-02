@@ -38,7 +38,9 @@ impl<T: BlobType> AccuracyLayer<T> {
     }
 }
 
-impl<T: BlobType> CaffeLayer<T> for AccuracyLayer<T> {
+impl<T: BlobType> CaffeLayer for AccuracyLayer<T> {
+    type DataType = T;
+
     fn get_impl(&self) -> &LayerImpl<T> {
         &self.layer
     }

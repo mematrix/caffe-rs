@@ -62,16 +62,18 @@ impl<T: BlobType> LayerImpl<T> {
 }
 
 
-pub trait CaffeLayer<T: BlobType> {
-    fn get_impl(&self) -> &LayerImpl<T>;
+pub trait CaffeLayer {
+    type DataType: BlobType;
 
-    fn get_impl_mut(&mut self) -> &mut LayerImpl<T>;
+    fn get_impl(&self) -> &LayerImpl<Self::DataType>;
 
-    fn layer_setup(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
+    fn get_impl_mut(&mut self) -> &mut LayerImpl<Self::DataType>;
+
+    fn layer_setup(&mut self, bottom: &BlobVec<Self::DataType>, top: &BlobVec<Self::DataType>) {
         def_layer_setup(self, bottom, top);
     }
 
-    fn reshape(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>);
+    fn reshape(&mut self, bottom: &BlobVec<Self::DataType>, top: &BlobVec<Self::DataType>);
 
     fn to_proto(&self, param: &mut caffe::LayerParameter, write_diff: bool) {
         def_to_proto(self, param, write_diff);
@@ -117,28 +119,34 @@ pub trait CaffeLayer<T: BlobType> {
         true
     }
 
-    fn forward_cpu(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>);
+    fn forward_cpu(&mut self, bottom: &BlobVec<Self::DataType>, top: &BlobVec<Self::DataType>);
 
-    fn forward_gpu(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
+    fn forward_gpu(&mut self, bottom: &BlobVec<Self::DataType>, top: &BlobVec<Self::DataType>) {
         self.forward_cpu(bottom, top);
     }
 
-    fn backward_cpu(&mut self, top: &BlobVec<T>, propagate_down: &Vec<bool>, bottom: &BlobVec<T>);
+    fn backward_cpu(&mut self, top: &BlobVec<Self::DataType>, propagate_down: &Vec<bool>,
+                    bottom: &BlobVec<Self::DataType>);
 
-    fn backward_gpu(&mut self, top: &BlobVec<T>, propagate_down: &Vec<bool>, bottom: &BlobVec<T>) {
+    fn backward_gpu(&mut self, top: &BlobVec<Self::DataType>, propagate_down: &Vec<bool>,
+                    bottom: &BlobVec<Self::DataType>) {
         self.backward_cpu(top, propagate_down, bottom);
     }
 
-    fn check_blob_counts(&self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
+    fn check_blob_counts(&self, bottom: &BlobVec<Self::DataType>, top: &BlobVec<Self::DataType>) {
         def_check_blob_counts(self, bottom, top);
     }
 }
 
 pub fn def_layer_setup<T, Caffe>(_this: &mut Caffe, _bottom: &BlobVec<T>, _top: &BlobVec<T>)
-    where T: BlobType, Caffe: CaffeLayer<T> + ?Sized {}
+    where
+        T: BlobType,
+        Caffe: CaffeLayer<DataType = T> + ?Sized {}
 
 pub fn def_to_proto<T, Caffe>(this: &Caffe, param: &mut caffe::LayerParameter, write_diff: bool)
-    where T: BlobType, Caffe: CaffeLayer<T> + ?Sized {
+    where
+        T: BlobType,
+        Caffe: CaffeLayer<DataType = T> + ?Sized {
     param.clear();
     param.clone_from(&this.get_impl().layer_param);
     param.clear_blobs();
@@ -148,7 +156,9 @@ pub fn def_to_proto<T, Caffe>(this: &Caffe, param: &mut caffe::LayerParameter, w
 }
 
 pub fn def_check_blob_counts<T, Caffe>(this: &Caffe, bottom: &BlobVec<T>, top: &BlobVec<T>)
-    where T: BlobType, Caffe: CaffeLayer<T> + ?Sized {
+    where
+        T: BlobType,
+        Caffe: CaffeLayer<DataType = T> + ?Sized {
     if this.exact_num_bottom_blobs() >= 0 {
         let num = this.exact_num_bottom_blobs();
         check_eq!(num, bottom.len() as i32, "{} Layer takes {} bottom blob(s) as input.",
@@ -188,11 +198,11 @@ pub fn def_check_blob_counts<T, Caffe>(this: &Caffe, bottom: &BlobVec<T>, top: &
 
 
 pub struct Layer<T: BlobType> {
-    layer: Box<dyn CaffeLayer<T>>,
+    layer: Box<dyn CaffeLayer<DataType = T>>,
 }
 
 impl<T: BlobType> Layer<T> {
-    pub fn new(layer: Box<dyn CaffeLayer<T>>) -> Self {
+    pub fn new(layer: Box<dyn CaffeLayer<DataType = T>>) -> Self {
         Layer {
             layer
         }
