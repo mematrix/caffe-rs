@@ -5,10 +5,18 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Sender, Receiver, channel};
 
 
-#[derive(Clone)]
 pub struct BlockingQueue<T> {
     sender: Sender<T>,
     receiver: Arc<Mutex<Receiver<T>>>,
+}
+
+impl<T> Clone for BlockingQueue<T> {
+    fn clone(&self) -> Self {
+        Self {
+            sender: self.sender.clone(),
+            receiver: self.receiver.clone(),
+        }
+    }
 }
 
 impl<T> BlockingQueue<T> {
