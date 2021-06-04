@@ -22,6 +22,18 @@ pub type SharedLayer<T> = Rc<RefCell<Layer<T>>>;
 /// A typedef of **vector of layer**.
 pub type LayerVec<T> = Vec<SharedLayer<T>>;
 
+/// Helper function to create a `SharedBlob<T>` object.
+#[inline]
+pub fn make_shared_blob<T: BlobType>(blob: Blob<T>) -> SharedBlob<T> {
+    Rc::new(RefCell::new(blob))
+}
+
+/// Helper function to create a `SharedLayer<T>` object.
+#[inline]
+pub fn make_shared_layer<T: BlobType>(layer: Layer<T>) -> SharedLayer<T> {
+    Rc::new(RefCell::new(layer))
+}
+
 
 #[derive(Clone, Default)]
 pub struct LayerImpl<T: BlobType> {

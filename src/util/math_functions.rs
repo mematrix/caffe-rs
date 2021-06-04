@@ -1,6 +1,6 @@
 use std::ops::{AddAssign, Div, MulAssign, DivAssign, SubAssign};
 
-use cblas::{Transpose, Layout, saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal, sgemm, sgemv, dgemm, dgemv};
+use cblas::{Transpose, Layout, saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal, sgemm, sgemv, dgemm, dgemv, scopy, dcopy};
 use float_next_after::NextAfter;
 use rand::distributions::{Uniform, Distribution, Bernoulli};
 use rand::distributions::uniform::SampleUniform;
@@ -50,6 +50,8 @@ pub trait CaffeNum:
 
     fn caffe_axpy(n: i32, alpha: Self, x: &[Self], y: &mut [Self]);
 
+    fn caffe_cpu_axpby(n: i32, alpha: Self, x: &[Self], beta: Self, y: &mut [Self]);
+
     fn caffe_cpu_asum(n: i32, x: &[Self]) -> Self;
 
     fn caffe_cpu_strided_dot(n: i32, x: &[Self], inc_x: i32, y: &[Self], inc_y: i32) -> Self;
@@ -57,6 +59,8 @@ pub trait CaffeNum:
     fn caffe_scal(n: i32, alpha: Self, x: &mut [Self]);
 
     fn caffe_cpu_dot(n: i32, x: &[Self], y: &[Self]) -> Self;
+
+    fn caffe_cpu_scale(n: i32, alpha: Self, x: &[Self], y: &mut [Self]);
 
     fn caffe_add(n: usize, a: &[Self], b: &[Self], y: &mut [Self]);
 
@@ -165,6 +169,10 @@ impl CaffeNum for i32 {
         todo!()
     }
 
+    fn caffe_cpu_axpby(n: i32, alpha: Self, x: &[Self], beta: Self, y: &mut [Self]) {
+        todo!()
+    }
+
     fn caffe_cpu_asum(n: i32, x: &[Self]) -> Self {
         todo!()
     }
@@ -178,6 +186,10 @@ impl CaffeNum for i32 {
     }
 
     fn caffe_cpu_dot(n: i32, x: &[Self], y: &[Self]) -> Self {
+        todo!()
+    }
+
+    fn caffe_cpu_scale(n: i32, alpha: Self, x: &[Self], y: &mut [Self]) {
         todo!()
     }
 
@@ -319,6 +331,10 @@ impl CaffeNum for f32 {
         unsafe { saxpy(n, alpha, x, 1, y, 1); }
     }
 
+    fn caffe_cpu_axpby(n: i32, alpha: Self, x: &[Self], beta: Self, y: &mut [Self]) {
+        cblas_saxpby(n, alpha, x, 1, beta, y, 1);
+    }
+
     fn caffe_cpu_asum(n: i32, x: &[f32]) -> f32 {
         unsafe { sasum(n, x, 1) }
     }
@@ -333,6 +349,13 @@ impl CaffeNum for f32 {
 
     fn caffe_cpu_dot(n: i32, x: &[f32], y: &[f32]) -> f32 {
         Self::caffe_cpu_strided_dot(n, x, 1, y, 1)
+    }
+
+    fn caffe_cpu_scale(n: i32, alpha: Self, x: &[Self], y: &mut [Self]) {
+        unsafe {
+            scopy(n, x, 1, y, 1);
+            sscal(n, alpha, y, 1);
+        }
     }
 
     fn caffe_add(n: usize, a: &[f32], b: &[f32], y: &mut [f32]) {
@@ -479,6 +502,10 @@ impl CaffeNum for f64 {
         unsafe { daxpy(n, alpha, x, 1, y, 1); }
     }
 
+    fn caffe_cpu_axpby(n: i32, alpha: Self, x: &[Self], beta: Self, y: &mut [Self]) {
+        cblas_daxpby(n, alpha, x, 1, beta, y, 1);
+    }
+
     fn caffe_cpu_asum(n: i32, x: &[f64]) -> f64 {
         unsafe { dasum(n, x, 1) }
     }
@@ -493,6 +520,13 @@ impl CaffeNum for f64 {
 
     fn caffe_cpu_dot(n: i32, x: &[f64], y: &[f64]) -> f64 {
         Self::caffe_cpu_strided_dot(n, x, 1, y, 1)
+    }
+
+    fn caffe_cpu_scale(n: i32, alpha: Self, x: &[Self], y: &mut [Self]) {
+        unsafe {
+            dcopy(n, x, 1, y, 1);
+            dscal(n, alpha, y, 1);
+        }
     }
 
     fn caffe_add(n: usize, a: &[f64], b: &[f64], y: &mut [f64]) {
