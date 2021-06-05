@@ -32,6 +32,8 @@ pub trait CaffeNum:
 
     fn to_i32(self) -> i32;
 
+    fn to_usize(self) -> usize;
+
     fn from_div(v: <Self as Div<Self>>::Output) -> Self;
 
     fn sqrt(v: Self) -> Self;
@@ -136,6 +138,10 @@ impl CaffeNum for i32 {
 
     fn to_i32(self) -> i32 {
         self
+    }
+
+    fn to_usize(self) -> usize {
+        self as usize
     }
 
     fn from_div(v: Self::Output) -> Self {
@@ -303,6 +309,10 @@ impl CaffeNum for f32 {
 
     fn to_i32(self) -> i32 {
         self as i32
+    }
+
+    fn to_usize(self) -> usize {
+        self as usize
     }
 
     fn from_div(v: Self::Output) -> Self {
@@ -474,6 +484,10 @@ impl CaffeNum for f64 {
 
     fn to_i32(self) -> i32 {
         self as i32
+    }
+
+    fn to_usize(self) -> usize {
+        self as usize
     }
 
     fn from_div(v: Self::Output) -> Self {
