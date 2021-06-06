@@ -1,4 +1,5 @@
 use std::any::TypeId;
+use std::borrow::Borrow;
 use std::boxed::Box;
 use std::cell::{RefCell, Ref, RefMut};
 use std::rc::Rc;
@@ -18,6 +19,7 @@ unsafe impl BlobType for i32 {}
 unsafe impl BlobType for f32 {}
 
 unsafe impl BlobType for f64 {}
+
 
 #[derive(Copy, Clone)]
 pub struct BlobMemRef<'a, T> {
@@ -52,7 +54,7 @@ impl<T> Blob<T> where T: BlobType {
         Default::default()
     }
 
-    pub fn with_shape(shape: &Vec<i32>) -> Self {
+    pub fn with_shape<Q: Borrow<[i32]> + ?Sized>(shape: &Q) -> Self {
         let mut blob = Blob::new();
         blob.reshape(shape);
         blob
@@ -158,7 +160,8 @@ impl<T> Blob<T> where T: BlobType {
         offset
     }
 
-    pub fn reshape(&mut self, shape: &Vec<i32>) {
+    pub fn reshape<Q: Borrow<[i32]> + ?Sized>(&mut self, shape: &Q) {
+        let shape = shape.borrow();
         check_le!(shape.len() as i32, MAX_BLOB_AXES);
 
         let mut count = 1;
@@ -173,7 +176,7 @@ impl<T> Blob<T> where T: BlobType {
 
         let count = count as usize;
         self.count = count;
-        self.shape.clone_from(shape);
+        self.shape = shape.to_vec();
 
         if count > self.capacity {
             self.capacity = count;
