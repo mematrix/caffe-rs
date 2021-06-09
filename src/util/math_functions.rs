@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, Div, MulAssign, DivAssign, SubAssign};
+use std::ops::{AddAssign, Div, MulAssign, DivAssign, SubAssign, Neg};
 
 use cblas::{Transpose, Layout, saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal, sgemm, sgemv, dgemm, dgemv, scopy, dcopy};
 use float_next_after::NextAfter;
@@ -12,7 +12,7 @@ use crate::util::rng::caffe_rng;
 
 pub trait CaffeNum:
     Copy + Sized + Default +
-    AddAssign + SubAssign + MulAssign + DivAssign +
+    AddAssign + SubAssign + MulAssign + DivAssign + Neg<Output = Self> +
     Div + PartialOrd + SampleUniform {
     fn is_zero(&self) -> bool;
 
@@ -38,7 +38,17 @@ pub trait CaffeNum:
 
     fn sqrt(v: Self) -> Self;
 
+    /// Return nature logarithm of the number.
+    fn ln(v: Self) -> Self;
+
+    /// Return `e^v`.
+    fn exp(v: Self) -> Self;
+
     fn fabs(v: Self) -> Self;
+
+    fn min(a: Self, b: Self) -> Self {
+        if b < a { b } else { a }
+    }
 
     /// Function likes the C++ `std::nextafter`, provided the next representable value of `self`
     /// toward the `y` direction.
@@ -144,12 +154,20 @@ impl CaffeNum for i32 {
         self as usize
     }
 
-    fn from_div(v: Self::Output) -> Self {
+    fn from_div(v: <Self as Div>::Output) -> Self {
         v
     }
 
     fn sqrt(v: Self) -> Self {
         (v as f64).sqrt() as i32
+    }
+
+    fn ln(v: Self) -> Self {
+        (v as f64).ln() as i32
+    }
+
+    fn exp(v: Self) -> Self {
+        (v as f64).exp() as i32
     }
 
     fn fabs(v: Self) -> Self {
@@ -315,12 +333,20 @@ impl CaffeNum for f32 {
         self as usize
     }
 
-    fn from_div(v: Self::Output) -> Self {
+    fn from_div(v: <Self as Div>::Output) -> Self {
         v
     }
 
     fn sqrt(v: Self) -> Self {
         v.sqrt()
+    }
+
+    fn ln(v: Self) -> Self {
+        v.ln()
+    }
+
+    fn exp(v: Self) -> Self {
+        v.exp()
     }
 
     fn fabs(v: Self) -> Self {
@@ -490,12 +516,20 @@ impl CaffeNum for f64 {
         self as usize
     }
 
-    fn from_div(v: Self::Output) -> Self {
+    fn from_div(v: <Self as Div>::Output) -> Self {
         v
     }
 
     fn sqrt(v: Self) -> Self {
         v.sqrt()
+    }
+
+    fn ln(v: Self) -> Self {
+        v.ln()
+    }
+
+    fn exp(v: Self) -> Self {
+        v.exp()
     }
 
     fn fabs(v: Self) -> Self {

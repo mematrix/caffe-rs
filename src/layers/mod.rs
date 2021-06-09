@@ -7,3 +7,4 @@ pub mod base_data_layer;
 pub mod batch_norm_layer;
 pub mod batch_reindex_layer;
 pub mod bias_layer;
+pub mod bnll_layer;

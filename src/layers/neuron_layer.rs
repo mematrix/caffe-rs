@@ -17,22 +17,27 @@ impl<T: BlobType> NeuronLayer<T> {
         }
     }
 
+    #[inline]
     pub fn get_impl(&self) -> &LayerImpl<T> {
         &self.layer
     }
 
+    #[inline]
     pub fn get_impl_mut(&mut self) -> &mut LayerImpl<T> {
         &mut self.layer
     }
 
+    #[inline]
     pub fn reshape(&mut self, bottom: &BlobVec<T>, top: &BlobVec<T>) {
         top[0].borrow_mut().reshape_like(&*bottom[0].as_ref().borrow());
     }
 
+    #[inline]
     pub fn exact_num_bottom_blobs(&self) -> i32 {
         1
     }
 
+    #[inline]
     pub fn exact_num_top_blobs(&self) -> i32 {
         1
     }

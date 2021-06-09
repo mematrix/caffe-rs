@@ -91,9 +91,7 @@ pub trait CaffeLayer {
         def_to_proto(self, param, write_diff);
     }
 
-    fn layer_type(&self) -> &'static str {
-        ""
-    }
+    fn layer_type(&self) -> &'static str;
 
     fn exact_num_bottom_blobs(&self) -> i32 {
         -1
@@ -150,6 +148,7 @@ pub trait CaffeLayer {
     }
 }
 
+#[inline]
 pub fn def_layer_setup<T, Caffe>(_this: &mut Caffe, _bottom: &BlobVec<T>, _top: &BlobVec<T>)
     where
         T: BlobType,

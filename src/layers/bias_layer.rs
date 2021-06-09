@@ -186,3 +186,5 @@ impl<T: BlobType> CaffeLayer for BiasLayer<T> {
         no_gpu!();
     }
 }
+
+register_layer_class!(Bias);
