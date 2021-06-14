@@ -50,6 +50,10 @@ pub trait CaffeNum:
         if b < a { b } else { a }
     }
 
+    fn max(a: Self, b: Self) -> Self {
+        if a < b { b } else { a }
+    }
+
     /// Function likes the C++ `std::nextafter`, provided the next representable value of `self`
     /// toward the `y` direction.
     fn next_toward(self, y: Self) -> Self;
