@@ -54,15 +54,9 @@ impl<T: BlobType> CaffeLayer for BNLLLayer<T> {
         for i in 0..count {
             let bottom = bottom_data[i];
             top_data[i] = if bottom > T::default() {
-                let mut v = bottom;
-                let mut exp = T::exp(-bottom);
-                exp += T::from_i32(1);
-                v += T::ln(exp);
-                v
+                bottom + T::ln(T::exp(-bottom) + T::from_i32(1))
             } else {
-                let mut exp = T::exp(bottom);
-                exp += T::from_i32(1);
-                T::ln(exp)
+                T::ln(T::exp(bottom) + T::from_i32(1))
             };
         }
     }
@@ -84,12 +78,7 @@ impl<T: BlobType> CaffeLayer for BNLLLayer<T> {
         let threshold = T::from_f64(BNLL_THRESHOLD);
         for i in 0..count {
             let exp_val = T::exp(T::min(mem_ref.data[i], threshold));
-            let mut diff = top_diff[i];
-            diff *= exp_val;
-            let mut val = exp_val;
-            val += T::from_i32(1);
-            diff /= val;
-            mem_ref.diff[i] = diff;
+            mem_ref.diff[i] = (top_diff[i] * exp_val) / (exp_val + T::from_i32(1));
         }
     }
 

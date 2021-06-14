@@ -174,7 +174,7 @@ impl<T: BlobType> CaffeLayer for AccuracyLayer<T> {
         top[0].borrow_mut().mutable_cpu_data()[0] = if count == 0 {
             T::default()
         } else {
-            T::from_div(accuracy / T::from_i32(count))
+            accuracy / T::from_i32(count)
         };
         if top.len() > 1 {
             let mut t1 = top[1].borrow_mut();
@@ -183,7 +183,7 @@ impl<T: BlobType> CaffeLayer for AccuracyLayer<T> {
                 let v = if num.is_zero() {
                     T::default()
                 } else {
-                    T::from_div(t1.cpu_data()[i] / num)
+                    t1.cpu_data()[i] / num
                 };
                 t1.mutable_cpu_data()[i] = v;
             }

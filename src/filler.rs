@@ -92,7 +92,7 @@ impl<T: BlobType> Filler<T> for GaussianFiller {
             // of non-zero input weights for a given output.
             assert!(blob.num_axes() >= 1);
             let num_outputs = blob.shape_idx(0);
-            let non_zero_probability = T::from_div(T::from_i32(sparse) / T::from_i32(num_outputs));
+            let non_zero_probability = T::from_i32(sparse) / T::from_i32(num_outputs);
             let mut rand_vec = Vec::with_capacity(count);
             rand_vec.resize(count, 0);
             caffe_rng_bernoulli_i32(count, non_zero_probability, &mut rand_vec);
@@ -175,7 +175,7 @@ impl<T: BlobType> Filler<T> for XavierFiller {
         let count = blob.count();
         assert_ne!(count, 0);
         let n = get_fan(&self.filler_param, blob);
-        let scale = T::sqrt(T::from_div(T::from_i32(3) / n));
+        let scale = T::sqrt(T::from_i32(3) / n);
         let mut neg_scale = T::default();
         neg_scale -= scale;
         caffe_rng_uniform(count, neg_scale, scale, blob.mutable_cpu_data());

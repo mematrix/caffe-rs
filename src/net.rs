@@ -1127,8 +1127,7 @@ impl<T: BlobType> Net<T> {
         for top_id in 0..self.top_vecs[layer_id].len() {
             let blob = self.top_vecs[layer_id][top_id].as_ref().borrow();
             let blob_name = self.blob_names[self.top_id_vecs[layer_id][top_id]].as_str();
-            let data_abs_val_mean = blob.asum_data() / T::from_usize(blob.count());
-            let data_abs_val_mean = T::from_div(data_abs_val_mean);
+            let data_abs_val_mean: T = blob.asum_data() / T::from_usize(blob.count());
             if Caffe::root_solver() {
                 info!("    [Forward] Layer {:?}, top blob {:?} data: {:?}",
                     self.layer_names[layer_id], blob_name, data_abs_val_mean);
@@ -1139,8 +1138,7 @@ impl<T: BlobType> Net<T> {
             let blob = layer.blobs()[param_id].as_ref().borrow();
             let net_param_id = self.param_id_vecs[layer_id][param_id];
             let blob_name = self.param_display_names[net_param_id].as_str();
-            let data_abs_val_mean = blob.asum_data() / T::from_usize(blob.count());
-            let data_abs_val_mean = T::from_div(data_abs_val_mean);
+            let data_abs_val_mean: T = blob.asum_data() / T::from_usize(blob.count());
             if Caffe::root_solver() {
                 info!("    [Forward] Layer {:?}, param blob {:?} data: {:?}",
                     self.layer_names[layer_id], blob_name, data_abs_val_mean);
@@ -1158,8 +1156,7 @@ impl<T: BlobType> Net<T> {
 
             let blob = bottom_vec[bottom_id].as_ref().borrow();
             let blob_name = self.blob_names[self.bottom_id_vecs[layer_id][bottom_id]].as_str();
-            let diff_abs_val_mean = blob.asum_diff() / T::from_usize(blob.count());
-            let diff_abs_val_mean = T::from_div(diff_abs_val_mean);
+            let diff_abs_val_mean: T = blob.asum_diff() / T::from_usize(blob.count());
             if Caffe::root_solver() {
                 info!("    [Backward] Layer {:?}, bottom blob {:?} diff: {:?}",
                     self.layer_names[layer_id], blob_name, diff_abs_val_mean);
@@ -1172,8 +1169,7 @@ impl<T: BlobType> Net<T> {
 
             let layer = self.layers[layer_id].as_ref().borrow();
             let blob = layer.blobs()[param_id].as_ref().borrow();
-            let diff_abs_val_mean = blob.asum_diff() / T::from_usize(blob.count());
-            let diff_abs_val_mean = T::from_div(diff_abs_val_mean);
+            let diff_abs_val_mean: T = blob.asum_diff() / T::from_usize(blob.count());
             if Caffe::root_solver() {
                 info!("    [Backward] Layer {:?}, param blob {:?} diff: {:?}",
                     self.layer_names[layer_id], param_id, diff_abs_val_mean);
@@ -1187,11 +1183,9 @@ impl<T: BlobType> Net<T> {
         let param_owner = self.param_owners[param_id];
         let layer_name = self.layer_names[self.param_layer_indices[param_id].0].as_str();
         let param_display_name = self.param_display_names[param_id].as_str();
-        let diff_abs_val_mean = blob.asum_diff() / T::from_usize(blob.count());
-        let diff_abs_val_mean = T::from_div(diff_abs_val_mean);
+        let diff_abs_val_mean: T = blob.asum_diff() / T::from_usize(blob.count());
         if param_owner < 0 {
-            let data_abs_val_mean = blob.asum_data() / T::from_usize(blob.count());
-            let data_abs_val_mean = T::from_div(data_abs_val_mean);
+            let data_abs_val_mean: T = blob.asum_data() / T::from_usize(blob.count());
             if Caffe::root_solver() {
                 info!("    [Update] Layer {:?}, param {:?} data: {:?}, diff: {:?}",
                     layer_name, param_display_name, data_abs_val_mean, diff_abs_val_mean);

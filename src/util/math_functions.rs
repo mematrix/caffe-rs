@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, Div, MulAssign, DivAssign, SubAssign, Neg};
+use std::ops::{AddAssign, SubAssign, MulAssign, DivAssign, Neg, Add, Sub, Mul, Div};
 
 use cblas::{Transpose, Layout, saxpy, daxpy, sasum, dasum, sdot, ddot, sscal, dscal, sgemm, sgemv, dgemm, dgemv, scopy, dcopy};
 use float_next_after::NextAfter;
@@ -11,9 +11,10 @@ use crate::util::rng::caffe_rng;
 
 
 pub trait CaffeNum:
-    Copy + Sized + Default +
+    Copy + Sized + Default + PartialOrd +
     AddAssign + SubAssign + MulAssign + DivAssign + Neg<Output = Self> +
-    Div + PartialOrd + SampleUniform {
+    Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Div<Output = Self> +
+    SampleUniform {
     fn is_zero(&self) -> bool;
 
     fn is_nan_v(&self) -> bool;
@@ -33,8 +34,6 @@ pub trait CaffeNum:
     fn to_i32(self) -> i32;
 
     fn to_usize(self) -> usize;
-
-    fn from_div(v: <Self as Div<Self>>::Output) -> Self;
 
     fn sqrt(v: Self) -> Self;
 
@@ -156,10 +155,6 @@ impl CaffeNum for i32 {
 
     fn to_usize(self) -> usize {
         self as usize
-    }
-
-    fn from_div(v: <Self as Div>::Output) -> Self {
-        v
     }
 
     fn sqrt(v: Self) -> Self {
@@ -335,10 +330,6 @@ impl CaffeNum for f32 {
 
     fn to_usize(self) -> usize {
         self as usize
-    }
-
-    fn from_div(v: <Self as Div>::Output) -> Self {
-        v
     }
 
     fn sqrt(v: Self) -> Self {
@@ -518,10 +509,6 @@ impl CaffeNum for f64 {
 
     fn to_usize(self) -> usize {
         self as usize
-    }
-
-    fn from_div(v: <Self as Div>::Output) -> Self {
-        v
     }
 
     fn sqrt(v: Self) -> Self {

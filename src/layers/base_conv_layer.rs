@@ -1,12 +1,14 @@
 use std::cell::RefCell;
 
+use cblas::Transpose;
+
 use crate::blob::{BlobType, Blob};
 use crate::filler::get_filler;
 use crate::layer::{CaffeLayer, LayerImpl, BlobVec, SharedBlob};
 use crate::proto::caffe::LayerParameter;
 use crate::util::im2col::{im2col_cpu, im2col_nd_cpu, col2im_cpu, col2im_nd_cpu};
 use crate::util::math_functions::caffe_set;
-use cblas::Transpose;
+
 
 /// Abstract base class that factors out the BLAS code common to `ConvolutionLayer` and `DeconvolutionLayer`.
 ///
