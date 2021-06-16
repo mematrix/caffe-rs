@@ -89,9 +89,7 @@ impl<T: BlobType> CaffeLayer for ClipLayer<T> {
         for i in 0..count {
             let data = bottom_ref.data[i];
             let in_range = (data >= min && data <= max) as i32;
-            let mut value = top_diff[i];
-            value *= T::from_i32(in_range);
-            bottom_ref.diff[i] = value;
+            bottom_ref.diff[i] = top_diff[i] * T::from_i32(in_range);
         }
     }
 

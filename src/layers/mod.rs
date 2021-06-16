@@ -9,3 +9,4 @@ pub mod batch_reindex_layer;
 pub mod bias_layer;
 pub mod bnll_layer;
 pub mod clip_layer;
+pub mod concat_layer;

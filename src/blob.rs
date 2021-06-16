@@ -47,7 +47,7 @@ pub struct Blob<T: BlobType> {
     capacity: usize,
 }
 
-const MAX_BLOB_AXES: i32 = 32;
+pub const MAX_BLOB_AXES: i32 = 32;
 
 impl<T> Blob<T> where T: BlobType {
     pub fn new() -> Self {
